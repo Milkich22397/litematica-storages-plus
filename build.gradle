@@ -1,0 +1,108 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.17.21'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+}
+
+loom {
+    splitEnvironmentSourceSets()
+    mods {
+        litematicainventories {
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    implementation files("libs/fabric-api-${project.fabric_api_version}.jar")
+    compileOnly fileTree(dir: project.fabric_api_version == '0.161.0+26.3' ? 'libs/fabric-api-modules' : "libs/fabric-api-modules-${project.fabric_api_version}", include: '*.jar')
+    implementation files('libs/litematica-fabric-26.3-0.29.1.jar')
+    implementation files('libs/malilib-fabric-26.3-0.30.2.jar')
+    compileOnly files('libs/modmenu-21.0.0.jar')
+    if (project.hasProperty('withChestTracker')) { runtimeOnly fileTree(dir: 'libs/integration', include: '*.jar') }
+    if (project.hasProperty('withModMenu')) { runtimeOnly files('libs/modmenu-21.0.0.jar') }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.named('processClientResources', ProcessResources) {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+    from('LICENSE') {
+        rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+
+sourceSets {
+    logicTest { java.srcDir 'src/logicTest/java'; compileClasspath += sourceSets.client.output; runtimeClasspath += sourceSets.client.output }
+}
+tasks.register('logicTest', JavaExec) {
+    dependsOn tasks.named('compileLogicTestJava')
+    classpath = sourceSets.logicTest.runtimeClasspath
+    mainClass = 'dev.asaul.litematicainventories.LogicTests'
+}
+tasks.named('check') { dependsOn tasks.named('logicTest') }
+tasks.withType(AbstractArchiveTask).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
+
+
+sourceSets {
+    smoke { compileClasspath += sourceSets.client.output + sourceSets.client.compileClasspath; runtimeClasspath += sourceSets.client.output + sourceSets.client.runtimeClasspath }
+}
+if (project.hasProperty('integrationTests')) {
+    loom {
+        mods { storagepreviewtests { sourceSet sourceSets.smoke } }
+        runs {
+            smoke { client(); source sourceSets.smoke; runDir 'run-smoke'; vmArg '-Xmx2G'; vmArg '-Dmixin.debug.export=true' }
+        }
+    }
+}
+
+
+
+
+if (project.hasProperty('integrationTests')) {
+tasks.named('runSmoke') {
+    doFirst { java.nio.file.Files.deleteIfExists(file('run-smoke/smoke-result.txt').toPath()) }
+    doLast {
+        def result = file('run-smoke/smoke-result.txt')
+        if (!result.exists() || result.text.contains('FAIL') || !result.text.contains('LIVE PASS: container')) {
+            throw new GradleException('Minecraft integration checks failed; inspect run-smoke/smoke-result.txt and logs/latest.log')
+        }
+    }
+}
+
+}

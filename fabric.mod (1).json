@@ -1,0 +1,1 @@
+{"schemaVersion": 1, "id": "storagepreviewtests", "version": "1.0.0", "name": "Storage Preview integration tests (development only)", "environment": "client", "entrypoints": {"client": ["dev.asaul.litematicainventories.SmokeTests"]}, "depends": {"litematicainventories": "*"}}
