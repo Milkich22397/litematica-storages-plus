@@ -27,10 +27,11 @@ public final class TrackedResourceChecks {
         if(Files.exists(proof)){
             var saved=NbtIo.readCompressed(proof,NbtAccounter.create(16*1024*1024));var expected=TrackedStorageStore.decode(saved);
             check(!expected.isEmpty(),"restart witness is nonempty");
-            for(var entry:expected.values())check(TrackedStorageStore.snapshot().stream().anyMatch(e->e.key().equals(entry.key())&&e.data().equals(entry.data())),"separate process loaded persisted resource snapshot");
+            for(var entry:expected.values())check(TrackedStorageStore.snapshot().stream().anyMatch(e->e.key().equals(entry.key())&&e.data().equals(entry.data())&&e.label().equals(entry.label())&&e.group().equals(entry.group())),"separate process loaded persisted resource snapshot");
+            if(saved.contains("Organization"))check(StorageGroups.encode().equals(saved.getCompoundOrEmpty("Organization")),"groups, selection and schematic bindings persist across process restart");
             check(!StorageSettings.INSTANCE.trackingPositions.isEmpty(),"dragged position persisted across process restart");
             for(var raw:saved.getListOrEmpty("Buttons"))if(raw instanceof CompoundTag button){var position=StorageSettings.INSTANCE.trackingPositions.get(button.getStringOr("Layout",""));check(position!=null&&position.x()==button.getIntOr("X",0)&&position.y()==button.getIntOr("Y",0),"exact dragged coordinates restored after process restart");}
-            log.add("RESOURCE RESTART PASS: previous process ledger and button position loaded from disk");
+            log.add("RESOURCE RESTART PASS: previous process ledger, labels, groups, schematic bindings and button position loaded from disk");
         }
         var stone=new ItemStack(Items.STONE);var original=c.player.getInventory().getNonEquipmentItems().stream().map(ItemStack::copy).toList();
         boolean record=StorageSettings.INSTANCE.recording,mode=StorageSettings.INSTANCE.includeTrackedResources;
@@ -81,11 +82,12 @@ public final class TrackedResourceChecks {
             var menu=ChestMenu.sixRows(72,c.player.getInventory());fill(menu,320);var d=new ContainerRecorder.Opening(c.level,menu,ContainerMenuAdapter.create(menu,pos,right));d.synchronizedMenu=true;
             var fromOther=new ContainerRecorder.Opening(c.level,menu,ContainerMenuAdapter.create(menu,other,c.level.getBlockState(other)));fromOther.synchronizedMenu=true;
             TrackedStorageStore.toggle(d);TrackedStorageStore.observe(fromOther,fromOther.adapter.copyItems());ResourceAccounting.tick(c);check(TrackedStorageStore.snapshot().size()==1&&ResourceAccounting.stored(stone)==320&&TrackedStorageStore.tracked(fromOther),"double chest canonical key, both halves, no double count");
+            check(StorageLocator.show(TrackedStorageStore.get(d.trackingKey)),"double chest can be highlighted");StorageLocator.opened(fromOther);check(StorageLocator.target()==null,"opening either double-chest half dismisses its highlight");StorageLocator.reset();
             c.level.setBlock(other,Blocks.AIR.defaultBlockState(),3);TrackedStorageStore.validateLoaded(c);ResourceAccounting.tick(c);check(ResourceAccounting.stored(stone)==0,"breaking one double chest half invalidates entire snapshot");
             TrackedStorageStore.clear();
             var endPos=pos.offset(4,0,0);c.level.setBlock(endPos,Blocks.ENDER_CHEST.defaultBlockState(),3);var em=ChestMenu.threeRows(73,c.player.getInventory());fill(em,64);var end=new ContainerRecorder.Opening(c.level,em,ContainerMenuAdapter.create(em,endPos,Blocks.ENDER_CHEST.defaultBlockState()));end.synchronizedMenu=true;
             TrackedStorageStore.toggle(end);var ep=endPos.offset(3,0,0);c.level.setBlock(ep,Blocks.ENDER_CHEST.defaultBlockState(),3);var end2=new ContainerRecorder.Opening(c.level,em,ContainerMenuAdapter.create(em,ep,Blocks.ENDER_CHEST.defaultBlockState()));end2.synchronizedMenu=true;
-            TrackedStorageStore.observe(end2,end2.adapter.copyItems());ResourceAccounting.tick(c);check(TrackedStorageStore.snapshot().size()==1&&TrackedStorageStore.tracked(end2)&&ResourceAccounting.stored(stone)==64,"ender chest identity is player/server, not block/dimension");
+            long endRevision=TrackedStorageStore.revision();TrackedStorageStore.observe(end2,end2.adapter.copyItems());check(TrackedStorageStore.revision()==endRevision,"unchanged ender observation does not rewrite ledger");ResourceAccounting.tick(c);check(TrackedStorageStore.snapshot().size()==1&&TrackedStorageStore.tracked(end2)&&ResourceAccounting.stored(stone)==64,"ender chest identity is player/server, not block/dimension");
             var tracker=fi.dy.masa.malilib.registry.Registry.ENTITY_DATA_REGISTRY.chestTracker();var nativeCache=tracker.getClass().getDeclaredField("enderCache");nativeCache.setAccessible(true);var oldCache=nativeCache.get(tracker);
             try{tracker.onCloseEnderChest(new net.minecraft.world.SimpleContainer(new ItemStack(Items.STONE,64)));fi.dy.masa.litematica.config.Configs.Generic.MATERIAL_LIST_COUNT_ENDER_CACHE.setBooleanValue(true);ResourceAccounting.tick(c);check(ResourceAccounting.available(stone)==192,"tracked ender and native Chest Tracker ender cache counted only once");}
             finally{nativeCache.set(tracker,oldCache);fi.dy.masa.litematica.config.Configs.Generic.MATERIAL_LIST_COUNT_ENDER_CACHE.setBooleanValue(false);}

@@ -8,14 +8,15 @@ import org.slf4j.LoggerFactory;
 public final class StorageSettings {
     public static final Path DIRECTORY = FabricLoader.getInstance().getConfigDir().resolve("litematicainventories");
     public static StorageSettings INSTANCE = load();
+    // Legacy aggregate is deliberately ignored by Gson; comparison is always per slot.
     public boolean recording = false, overlay = true;
-    public boolean aggregate = false;
     public long ttlHours = 168;
     public int maxEntries = 50000;
     public String namespace = "default";
     public int missingColor = 0x665599FF, matchColor = 0xFF55CC77, countColor = 0x66FFCC44;
     public int wrongColor = 0x66FF5555, unknownColor = 0xFF999999;
     public int extraColor = 0x66FF77BB;
+    public boolean resourceBreakdown=false;
     public boolean resourceTracking=true,includeTrackedResources=false,showTrackingButton=true;
     public record ButtonPosition(int x,int y) {}
     public java.util.Map<String,ButtonPosition> trackingPositions=new java.util.HashMap<>();

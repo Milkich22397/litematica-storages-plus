@@ -34,14 +34,15 @@ public final class LiveMenuChecks {
  private static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
  private static int count(ContainerSnapshot s,Minecraft c){return InventoryData.decode(s.blockEntityData(),27,c.level.registryAccess()).getFirst().getCount();}
  private static void screenshot(Minecraft c,String name){net.minecraft.client.Screenshot.grab(new java.io.File("."),name,c.gameRenderer.mainRenderTarget(),1,msg->{});}
+ private static ItemStack nestedFixture(int count){var stack=new ItemStack(Items.SHULKER_BOX);stack.set(net.minecraft.core.component.DataComponents.CONTAINER,net.minecraft.world.item.component.ItemContainerContents.fromItems(List.of(new ItemStack(Items.STONE,count))));return stack;}
  private static void visualFixture(Minecraft c,boolean enable){
   var expected=new ArrayList<ItemStack>(Collections.nCopies(27,ItemStack.EMPTY));expected.set(0,new ItemStack(Items.DIAMOND,32));
-  if(enable){expected.set(1,new ItemStack(Items.REDSTONE,16));expected.set(2,new ItemStack(Items.REDSTONE,16));expected.set(4,new ItemStack(Items.REDSTONE,16));expected.set(6,new ItemStack(Items.REDSTONE,16));}
+  if(enable){expected.set(1,new ItemStack(Items.REDSTONE,16));expected.set(2,new ItemStack(Items.REDSTONE,16));expected.set(4,new ItemStack(Items.REDSTONE,16));expected.set(6,new ItemStack(Items.REDSTONE,16));expected.set(8,nestedFixture(64));}
   var map=portable.getBlockEntityMapForRegion("storage");
   var data=fi.dy.masa.malilib.util.data.tag.converter.DataConverterNbt.toVanillaCompound(map.get(BlockPos.ZERO));
   data.put("Items",InventoryData.encode(expected,c.level.registryAccess()).get("Items"));
   map.put(BlockPos.ZERO,fi.dy.masa.malilib.util.data.tag.converter.DataConverterNbt.fromVanillaCompound(data));
-  c.getSingleplayerServer().execute(()->{var be=(ChestBlockEntity)c.getSingleplayerServer().overworld().getBlockEntity(pos);for(int n=1;n<27;n++)be.setItem(n,ItemStack.EMPTY);if(enable){be.setItem(1,new ItemStack(Items.REDSTONE_TORCH));be.setItem(2,new ItemStack(Items.REDSTONE,8));be.setItem(3,new ItemStack(Items.REDSTONE,5));be.setItem(4,new ItemStack(Items.REDSTONE,16));be.setItem(6,new ItemStack(Items.REDSTONE,24));}be.setChanged();});
+  c.getSingleplayerServer().execute(()->{var be=(ChestBlockEntity)c.getSingleplayerServer().overworld().getBlockEntity(pos);for(int n=1;n<27;n++)be.setItem(n,ItemStack.EMPTY);if(enable){be.setItem(1,new ItemStack(Items.REDSTONE_TORCH));be.setItem(2,new ItemStack(Items.REDSTONE,8));be.setItem(3,new ItemStack(Items.REDSTONE,5));be.setItem(4,new ItemStack(Items.REDSTONE,16));be.setItem(6,new ItemStack(Items.REDSTONE,24));be.setItem(8,nestedFixture(32));}be.setChanged();});
  }
  private static void materialFixture(Minecraft c){
   Item[] types={Items.DIAMOND,Items.REDSTONE,Items.ARROW,Items.BONE,Items.GLASS_BOTTLE,Items.GLOWSTONE_DUST,Items.GUNPOWDER,Items.STRING,Items.WATER_BUCKET,Items.WHEAT_SEEDS,Items.STONE,Items.COBBLESTONE,Items.OAK_LOG,Items.IRON_INGOT,Items.GOLD_INGOT,Items.COAL,Items.EMERALD,Items.LAPIS_LAZULI,Items.COPPER_INGOT,Items.OBSIDIAN,Items.SAND,Items.GRAVEL,Items.DIRT,Items.TORCH,Items.CHEST,Items.HOPPER,Items.PISTON};
@@ -95,7 +96,7 @@ public final class LiveMenuChecks {
     c.gui.screen().mouseReleased(hold);check(TrackedStorageStore.tracked(o),"long hold without moving never toggles tracking");
     var jitter=click(b.getX()+8,b.getY()+7);c.gui.screen().mouseClicked(jitter,false);c.gui.screen().mouseDragged(click(jitter.x()+1,jitter.y()+1),1,1);c.gui.screen().mouseReleased(jitter);
     check(!TrackedStorageStore.tracked(o),"one-pixel jitter remains a short click");trackClick(c);check(TrackedStorageStore.tracked(o),"short click restores tracking after jitter test");
-    log.add("RESOURCE LIVE PASS: actual icon click registers chest; direct drag persists position without toggling");log.add("LIVE PASS: survival use-block Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ synchronized menu Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ persistent cache (32 diamonds)");
+    log.add("RESOURCE LIVE PASS: actual icon click registers chest; direct drag persists position without toggling");log.add("LIVE PASS: survival use-block Р В Р’В Р В РІР‚В Р В Р вЂ Р В РІР‚С™Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РЎС› synchronized menu Р В Р’В Р В РІР‚В Р В Р вЂ Р В РІР‚С™Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р Р†РІР‚С›РЎС› persistent cache (32 diamonds)");
     AreaSelection area=new AreaSelection();area.setExplicitOrigin(pos);area.addSubRegionBox(new Box(pos,pos,"storage"),false);
     Files.deleteIfExists(Path.of("test-schematics/live-survival.litematic"));
     var s=LitematicaSchematic.createEmptySchematic(area,"live-survival");
@@ -120,7 +121,7 @@ public final class LiveMenuChecks {
     var model=new StorageMaterialList(new MaterialListPlacement(placement,false));model.refresh();
     check(model.expectedKnown==1&&model.actualKnown==1,"material list coverage");check(model.rows.size()==1&&model.rows.getFirst().expected()==32&&model.rows.getFirst().missing()==32,"material list container deficit");
     log.add("LIVE PASS: storage material tab separates expected 32 / observed 0 / missing 32");
-    visualFixture(c,true);StorageSettings.INSTANCE.aggregate=false;c.options.guiScale().set(2);c.resizeGui();next(4);
+    visualFixture(c,true);c.options.guiScale().set(2);c.resizeGui();next(4);
    }}
    case 4 -> {
     if(ticks==140){screenshot(c,"storage-slot-colors.png");var slots=ContainerRecorder.active().adapter.slots();
@@ -129,12 +130,14 @@ public final class LiveMenuChecks {
      check(StorageOverlayRenderer.tooltip(slots.get(1)).size()==1,"wrong item adds only expected line");
      check(StorageOverlayRenderer.tooltip(slots.get(2)).size()==2,"quantity mismatch adds two short lines");
      check(StorageOverlayRenderer.tooltip(slots.get(3)).size()==1,"extra item adds one line");
+     check(StorageOverlayRenderer.tooltip(slots.get(8)).size()==3,"real nested shulker adds expected line and two compact internal lines");
+     log.add("NESTED LIVE PASS: synchronized server shulker contents compared against saved schematic; compact internal difference tooltip");
      log.add("LIVE PASS: compact tooltips: match/empty 0 lines; wrong/extra 1 line; quantity 2 lines");
-     double scale=c.getWindow().getGuiScale();var slot=slots.get(1);
+     double scale=c.getWindow().getGuiScale();var slot=slots.get(8);
      c.mouseHandler.onMove(c.getWindow().handle(),((c.getWindow().getGuiScaledWidth()-176)/2+slot.x+8)*scale,((c.getWindow().getGuiScaledHeight()-166)/2+slot.y+8)*scale,0,0);
     }
-    if(ticks==160){screenshot(c,"storage-overlay-scale2.png");StorageSettings.INSTANCE.aggregate=true;next(5);}}
-   case 5 -> {if(ticks==30){screenshot(c,"storage-overlay-aggregate.png");c.getWindow().setWindowed(1280,800);c.options.guiScale().set(3);c.resizeGui();next(6);}}
+    if(ticks==160){screenshot(c,"storage-overlay-scale2.png");net.minecraft.client.KeyMapping.click(com.mojang.blaze3d.platform.InputConstants.Type.KEYBOARD.getOrCreate(com.mojang.blaze3d.platform.InputConstants.KEY_F7));next(5);}}
+   case 5 -> {if(ticks==30){check(StorageOverlayRenderer.tooltip(ContainerRecorder.active().adapter.slots().get(2)).size()==2,"F7 cannot enable whole-container comparison");log.add("SLOT-ONLY LIVE PASS: F7 leaves per-slot quantity differences intact; no comparison-mode binding");screenshot(c,"storage-overlay-slot-only.png");c.getWindow().setWindowed(1280,800);c.options.guiScale().set(3);c.resizeGui();next(6);}}
    case 6 -> {if(ticks==30){screenshot(c,"storage-overlay-scale3.png");visualFixture(c,false);
     net.minecraft.client.KeyMapping.click(com.mojang.blaze3d.platform.InputConstants.Type.KEYBOARD.getOrCreate(com.mojang.blaze3d.platform.InputConstants.KEY_F10));next(60);
    }}
@@ -168,14 +171,19 @@ public final class LiveMenuChecks {
     c.player.closeContainer();var custom=new MaterialListCustom("Storages+ 640 / 448",Map.of(new fi.dy.masa.malilib.util.data.ItemType(new ItemStack(Items.STONE),true,false),640),Path.of("resource-example.json"));
     c.setScreenAndShow(new fi.dy.masa.litematica.gui.GuiMaterialList(custom));var p=ResourceAccounting.progress(custom);check(p.collected()==448&&p.remaining()==192&&p.percent()==70,"real Material List example progress");next(124);
    }}
-   case 124 -> {if(ticks==30){screenshot(c,"resource-material-list.png");nativeClick(c,"storages.mode.true");check(!StorageSettings.INSTANCE.includeTrackedResources,"native mode button switches to inventory");nativeClick(c,"storages.mode.false");check(StorageSettings.INSTANCE.includeTrackedResources,"native mode button restores combined mode");hudChecks=new HudRenderChecks(((fi.dy.masa.litematica.gui.GuiMaterialList)c.gui.screen()).getMaterialList());c.setScreenAndShow(hudChecks);next(1241);}}
+   case 124 -> {if(ticks==30){screenshot(c,"resource-material-list.png");nativeClick(c,"storages.mode.true");check(!StorageSettings.INSTANCE.includeTrackedResources,"native mode button switches to inventory");nativeClick(c,"storages.mode.false");check(StorageSettings.INSTANCE.includeTrackedResources,"native mode button restores combined mode");StorageSettings.INSTANCE.resourceBreakdown=true;var browser=((dev.asaul.litematicainventories.mixin.GuiListLayoutAccess)c.gui.screen()).storage$list();double scale=c.getWindow().getGuiScale();c.mouseHandler.onMove(c.getWindow().handle(),80*scale,((int)field(browser,fi.dy.masa.malilib.gui.widgets.WidgetListBase.class,"posY")+32)*scale,0,0);next(12401);}}
+   case 12401 -> {if(ticks==15){screenshot(c,"resource-source-breakdown.png");StorageSettings.INSTANCE.resourceBreakdown=false;hudChecks=new HudRenderChecks(((fi.dy.masa.litematica.gui.GuiMaterialList)c.gui.screen()).getMaterialList());c.setScreenAndShow(hudChecks);next(1241);}}
    case 1241 -> {if(ticks==15){hudChecks.expect(192);screenshot(c,"resource-info-hud.png");StorageSettings.INSTANCE.includeTrackedResources=false;next(1242);}}
    case 1242 -> {if(ticks==15){hudChecks.expect(512);StorageSettings.INSTANCE.includeTrackedResources=true;hudChecks.list.setMultiplier(2);next(1243);}}
    case 1243 -> {if(ticks==15){hudChecks.expect(832);hudChecks.list.setMultiplier(1);hudChecks.list.setMaterialListEntries(List.of(new MaterialListEntry(new ItemStack(Items.STONE),448,448,0,128)));next(1244);}}
    case 1244 -> {if(ticks==15){check(hudChecks.renderedHeight==0&&hudChecks.hud.counts.isEmpty(),"fully covered HUD row disappears");hudChecks.list.setMaterialListEntries(List.of(new MaterialListEntry(new ItemStack(Items.STONE),640,640,0,128)));hudChecks.list.ignoreEntry(hudChecks.list.getMaterialsAll().getFirst());next(1245);}}
    case 1245 -> {if(ticks==15){check(hudChecks.renderedHeight==0&&hudChecks.hud.counts.isEmpty(),"ignored HUD row stays hidden");log.add("HUD LIVE PASS: native renderer width/draw passes: combined192, inventory512, multiplier2=832; fully covered and ignored rows hidden without mutating inventory counts");c.setScreenAndShow(new ResourceSettingsScreen(new SettingsScreen(null)));next(125);}}
-   case 125 -> {if(ticks==25){screenshot(c,"resource-settings.png");TrackedResourceChecks.persistRestartProof();reopenWorld=c.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize().getFileName().toString();c.disconnect(new net.minecraft.client.gui.screens.TitleScreen(),false);next(126);}}
-   case 126 -> {if(c.level==null&&ticks>20){c.createWorldOpenFlows().openWorld(reopenWorld,()->{});next(127);}}
+   case 125 -> {if(ticks==25){screenshot(c,"resource-settings.png");StorageUiChecks.start(c,portable);next(1250);}}
+   case 1250 -> {if(StorageUiChecks.tick(c,log)){TrackedResourceChecks.persistRestartProof();reopenWorld=c.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize().getFileName().toString();c.disconnect(new net.minecraft.client.gui.screens.TitleScreen(),false);next(126);}}
+   case 126 -> {if(c.level==null&&ticks>20){
+    check(ContainerRecorder.active()==null&&field(null,ContainerRecorder.class,"candidate")==null,"disconnect releases recorder world references");
+    check(field(null,StorageOverlayRenderer.class,"opening")==null&&field(null,StorageOverlayRenderer.class,"resolution")==null,"disconnect releases overlay world/placement references");
+    log.add("MEMORY LIVE PASS: disconnect clears recorder candidate/opening and overlay world/placement references");c.createWorldOpenFlows().openWorld(reopenWorld,()->{});next(127);}}
    case 127 -> {
     if(c.gui.screen() instanceof net.minecraft.client.gui.screens.BackupConfirmScreen&&ticks%10==0){
      var button=c.gui.screen().children().stream().filter(w->w instanceof net.minecraft.client.gui.components.Button).map(w->(net.minecraft.client.gui.components.Button)w).filter(b->b.getMessage().getString().equals(net.minecraft.network.chat.Component.translatable("selectWorld.backupJoinSkipButton").getString())).findFirst().orElseThrow();c.gui.screen().mouseClicked(click(button.getX()+4,button.getY()+4),false);

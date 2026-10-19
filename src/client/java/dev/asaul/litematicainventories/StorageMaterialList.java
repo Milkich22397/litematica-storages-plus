@@ -37,7 +37,7 @@ public final class StorageMaterialList {
         Map<BlockPos,SchematicInventoryResolver.Expected> containers=new LinkedHashMap<>();
         Collection<String> enabled=placement!=null?placement.getEnabledRelativeSubRegionPlacements().keySet():regions;
         for(String r:new TreeSet<>(enabled)) {
-            var c=schematic.getSubRegionContainer(r);if(c==null)continue;var size=schematic.getAreaSize(r);
+            var c=schematic.getSubRegionContainer(r);if(c==null||!ContainerMenuAdapter.hasStoragePalette(c))continue;var size=schematic.getAreaSize(r);
             BlockPos region=schematic.getSubRegionPosition(r),offset=PositionUtils.getMinCorner(BlockPos.ZERO,PositionUtils.getRelativeEndPositionFromAreaSize(size));
             for(int y=0;y<Math.abs(size.getY());y++) for(int z=0;z<Math.abs(size.getZ());z++) for(int x=0;x<Math.abs(size.getX());x++) {
                 if(ContainerMenuAdapter.size(c.get(x,y,z))==0)continue;
@@ -79,7 +79,7 @@ public final class StorageMaterialList {
         Map<BlockPos,net.minecraft.nbt.CompoundTag> inventories=new LinkedHashMap<>();Set<BlockPos> unknown=new HashSet<>(),bad=new HashSet<>();
         Collection<String> enabled=placement!=null?placement.getEnabledRelativeSubRegionPlacements().keySet():regions;
         for(String r:new TreeSet<>(enabled)) {
-            var c=schematic.getSubRegionContainer(r);if(c==null)continue;var size=schematic.getAreaSize(r);
+            var c=schematic.getSubRegionContainer(r);if(c==null||!ContainerMenuAdapter.hasStoragePalette(c))continue;var size=schematic.getAreaSize(r);
             var offset=PositionUtils.getMinCorner(BlockPos.ZERO,PositionUtils.getRelativeEndPositionFromAreaSize(size));
             for(int y=0;y<Math.abs(size.getY());y++)for(int z=0;z<Math.abs(size.getZ());z++)for(int x=0;x<Math.abs(size.getX());x++) {
                 int slots=ContainerMenuAdapter.size(c.get(x,y,z));if(slots==0)continue;BlockPos l=new BlockPos(x,y,z);

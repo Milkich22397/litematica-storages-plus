@@ -18,6 +18,11 @@ public record ContainerMenuAdapter(List<Slot> slots, List<BlockPos> halves, int 
         if(b==Blocks.DISPENSER||b==Blocks.DROPPER) return 9;
         return 0;
     }
+    public static boolean hasStoragePalette(fi.dy.masa.litematica.schematic.container.LitematicaBlockStateContainer container){
+        var palette=container.getPalette();
+        for(int n=0;n<palette.getPaletteSize();n++){var state=palette.getBlockState(n);if(state!=null&&size(state)>0)return true;}
+        return false;
+    }
     public static ContainerMenuAdapter create(AbstractContainerMenu menu,BlockPos pos,BlockState state) {
         // InventoryMenu has no MenuType; custom menus may also deliberately reject getType().
         // Accept exact vanilla implementations before asking for their registered type.
@@ -53,5 +58,6 @@ public record ContainerMenuAdapter(List<Slot> slots, List<BlockPos> halves, int 
         for(String name:names)text=text.replace(name+"=true",name+"=false");return text;
     }
     public List<ItemStack> copyItems() { return slots.stream().map(s->s.getItem().copy()).toList(); }
-    public int logical(Slot slot) { return slots.indexOf(slot); }
+    public boolean matchesItems(List<ItemStack> saved){if(saved==null||saved.size()!=slots.size())return false;for(int n=0;n<slots.size();n++)if(!ItemStack.matches(saved.get(n),slots.get(n).getItem()))return false;return true;}
+    public int logical(Slot slot) {int i=slot.getContainerSlot();return i>=0&&i<slots.size()&&slots.get(i)==slot?i:-1;}
 }

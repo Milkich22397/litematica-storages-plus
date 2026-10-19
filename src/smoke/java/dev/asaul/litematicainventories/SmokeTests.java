@@ -30,7 +30,7 @@ public final class SmokeTests implements ClientModInitializer {
  private static void check(boolean b,String message){checks++;if(!b)throw new AssertionError(message);}
  @Override public void onInitializeClient(){ClientTickEvents.END_CLIENT_TICK.register(c->{
   if(!worldStarted&&c.gui.screen() instanceof TitleScreen){worldStarted=true;c.createWorldOpenFlows().createFreshLevel("storage-preview-smoke-"+System.currentTimeMillis(),new net.minecraft.world.level.LevelSettings("Storage Preview integration",net.minecraft.world.level.GameType.SURVIVAL,new net.minecraft.world.level.LevelSettings.DifficultySettings(net.minecraft.world.Difficulty.PEACEFUL,false,false),false,net.minecraft.world.level.WorldDataConfiguration.DEFAULT),new net.minecraft.world.level.levelgen.WorldOptions(12831L,false,false),net.minecraft.world.level.levelgen.presets.WorldPresets::createTestWorldDimensions,new TitleScreen());}
-  if(!ran&&c.level!=null&&c.player!=null&&c.level.getGameTime()>40){ran=true;try{run();TrackedResourceChecks.run(c,log);log.add("SMOKE PASS: "+checks+" assertions");LiveMenuChecks.start(c,log);}catch(Throwable e){finish(c,e);}}
+  if(!ran&&c.level!=null&&c.player!=null&&c.level.getGameTime()>40){ran=true;try{run();TrackedResourceChecks.run(c,log);OptimizationChecks.run(c,log);StorageFeatureChecks.run(c,log);log.add("SMOKE PASS: "+checks+" assertions");LiveMenuChecks.start(c,log);}catch(Throwable e){finish(c,e);}}
   else if(ran&&LiveMenuChecks.started){try{if(LiveMenuChecks.tick(c))finish(c,null);}catch(Throwable e){finish(c,e);}}
  });}
  private static void finish(Minecraft c,Throwable error){
@@ -41,6 +41,11 @@ public final class SmokeTests implements ClientModInitializer {
   // Force all mandatory hooks to transform, including classes not normally loaded by title screen.
   for(String name:List.of("fi.dy.masa.litematica.scheduler.tasks.TaskSaveSchematic","fi.dy.masa.litematica.gui.GuiMaterialList","fi.dy.masa.litematica.materials.MaterialListSchematic","fi.dy.masa.litematica.materials.MaterialListPlacement","net.minecraft.client.gui.screens.inventory.AbstractContainerScreen"))Class.forName(name);
   log.add("Mandatory mixin target classes loaded");
+  var legacySettings=new com.google.gson.Gson().fromJson("{\"aggregate\":true,\"recording\":true,\"overlay\":false,\"namespace\":\"legacy-slot-only\"}",StorageSettings.class);
+  check(legacySettings.recording&&!legacySettings.overlay&&legacySettings.namespace.equals("legacy-slot-only"),"legacy whole-container setting is ignored without losing other preferences");
+  check(!new com.google.gson.Gson().toJsonTree(legacySettings).getAsJsonObject().has("aggregate"),"obsolete comparison setting is not saved again");
+  check(Arrays.stream(Minecraft.getInstance().options.keyMappings).noneMatch(k->k.getName().equals("key.litematicainventories.toggle_mode")),"comparison-mode key binding no longer registered");
+  log.add("SLOT-ONLY PASS: legacy aggregate=true ignored, other settings retained, obsolete mode not saved and F7 toggle removed");
   var reg=Minecraft.getInstance().level.registryAccess();
   if(SessionInventoryCache.snapshot().containsKey(new CacheKey("restart-proof","test:dim",BlockPos.ZERO)))log.add("RESTART PASS: prior process persisted known-empty marker and new client loaded it");
   ItemStack sword=new ItemStack(Items.DIAMOND_SWORD);ItemStack damaged=sword.copy();damaged.set(DataComponents.DAMAGE,7);

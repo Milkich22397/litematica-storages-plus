@@ -15,7 +15,7 @@ public final class SettingsScreen extends GuiBase {
         button(x,24,total,"storages.settings",()->mc.setScreenAndShow(new ResourceSettingsScreen(this)));
         button(x,48,col,s.recording?"litematicainventories.recording.on":"litematicainventories.recording.off",SessionInventoryCache::toggleRecording);
         button(x+col+8,48,col,s.overlay?"storage.overlay.on":"storage.overlay.off",()->s.overlay=!s.overlay);
-        button(x,70,total,"storage.mode."+(s.aggregate?"aggregate":"strict"),()->s.aggregate=!s.aggregate);
+        addLabel(x,74,total,12,-1,Component.translatable("storage.mode.strict").getString());
         var profile=new GuiTextFieldGeneric(x,94,total,16,font);profile.setMaxLengthWrapper(100);profile.setValueWrapper(s.namespace);profile.setHoverTooltip(Component.translatable("storage.profile").getString());addTextField(profile,f->{if(!f.getValueWrapper().isBlank())s.namespace=f.getValueWrapper();return true;});
         addLabel(x,114,col,12,-1,Component.translatable("storage.ttl").getString());addLabel(x+col+8,114,col,12,-1,Component.translatable("storage.limit").getString());
         var ttl=new GuiTextFieldGeneric(x,128,col,16,font);ttl.setValueWrapper(Long.toString(s.ttlHours));addTextField(ttl,f->{try{s.ttlHours=Math.clamp(Long.parseLong(f.getValueWrapper()),0,876000);}catch(NumberFormatException invalid){return false;}return true;});

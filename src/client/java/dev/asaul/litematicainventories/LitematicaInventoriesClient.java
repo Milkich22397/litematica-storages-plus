@@ -5,7 +5,6 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 public final class LitematicaInventoriesClient implements ClientModInitializer {
@@ -26,19 +25,18 @@ public final class LitematicaInventoriesClient implements ClientModInitializer {
             InputConstants.KEY_F10, CATEGORY
     ));
 
-    private static final KeyMapping TOGGLE_MODE=KeyMappingHelper.registerKeyMapping(new KeyMapping("key.litematicainventories.toggle_mode",InputConstants.Type.KEYBOARD,InputConstants.KEY_F7,CATEGORY));
     @Override
     public void onInitializeClient() {
         SessionInventoryCache.size();
         TrackedStorageStore.load();
+        StorageLocator.initialize();
         ContainerRecorder.initialize();
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING.register(c -> { TrackedStorageStore.awaitWrites(); SessionInventoryCache.shutdown(); });
-        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.register((h,c) -> {SessionInventoryCache.flush();TrackedStorageStore.flush();});
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.register((h,c) -> {StorageLocator.reset();ContainerRecorder.disconnected();SessionInventoryCache.flush();TrackedStorageStore.flush();});
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             SessionInventoryCache.tick();
             TrackedStorageStore.tick(client);
             ResourceAccounting.tick(client);
-            while(TOGGLE_MODE.consumeClick()){StorageSettings.INSTANCE.aggregate=!StorageSettings.INSTANCE.aggregate;StorageSettings.save();if(client.player!=null)client.player.sendOverlayMessage(Component.translatable("storage.mode."+(StorageSettings.INSTANCE.aggregate?"aggregate":"strict")));}
             while (TOGGLE_RECORDING.consumeClick()) {
                 SessionInventoryCache.toggleRecording();
             }

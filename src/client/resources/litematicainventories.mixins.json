@@ -21,7 +21,8 @@
     "ResourceMaterialListAccess",
     "ResourceMaterialBrowserMixin",
     "ResourceProgressMixin",
-    "ResourceMaterialHudMixin"
+    "ResourceMaterialHudMixin",
+    "ResourceListRevisionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

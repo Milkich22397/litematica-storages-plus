@@ -21,14 +21,17 @@ public final class ContainerRecorder {
         public final ClientLevel world; public final AbstractContainerMenu menu; public final ContainerMenuAdapter adapter;
         public final String server,dimension; public final List<BlockState> states; public final long created=System.currentTimeMillis();
         public final UUID playerId;
+        public final TrackedStorageStore.Key trackingKey;
         public boolean synchronizedMenu;
         private List<ItemStack> previous;
+        private List<ItemStack> observedItems;
         List<ItemStack> resourcePrevious;
-        Opening(ClientLevel w,AbstractContainerMenu m,ContainerMenuAdapter a) {world=w;menu=m;adapter=a; var c=Minecraft.getInstance();playerId=c.player.getUUID();server=SessionContext.serverId(c); dimension=SessionContext.dimensionId(c); states=new ArrayList<>(a.halves().stream().map(w::getBlockState).toList());}
+        Opening(ClientLevel w,AbstractContainerMenu m,ContainerMenuAdapter a) {world=w;menu=m;adapter=a; var c=Minecraft.getInstance();playerId=c.player.getUUID();server=SessionContext.serverId(c); dimension=SessionContext.dimensionId(c); states=new ArrayList<>(a.halves().stream().map(w::getBlockState).toList());trackingKey=TrackedStorageStore.createKey(this);}
     }
     private static Candidate candidate;
     private static Opening active;
     public static Opening active() { return active; }
+    public static void disconnected(){active=null;candidate=null;status="";StorageOverlayRenderer.reset();}
     public static String status="";
     public static void initialize() {
         UseBlockCallback.EVENT.register((p,w,h,hit)-> { if(h==InteractionHand.MAIN_HAND && w instanceof ClientLevel cw) candidate=new Candidate(cw,hit.getBlockPos().immutable(),cw.getBlockState(hit.getBlockPos()),System.currentTimeMillis()); return InteractionResult.PASS; });
@@ -41,11 +44,13 @@ public final class ContainerRecorder {
             if(a==null) { status="unsupported"; ScreenEvents.remove(s).register(removed->status=""); return; }
             for(BlockPos pos:a.halves()) if(!ClientChunks.loaded(c.level,pos)||c.level.getBlockEntity(pos)==null) return;
             Opening opening=new Opening(c.level,screen.getMenu(),a); active=opening;
+            StorageLocator.opened(opening);
             ScreenEvents.remove(s).register(removed->{ if(active==opening) { snapshotMenu(opening); active=null; SessionInventoryCache.flush(); TrackedStorageStore.flush(); } });
         });
         ClientTickEvents.END_CLIENT_TICK.register(c->{
+            if(candidate!=null&&(candidate.world!=c.level||System.currentTimeMillis()-candidate.time>2000))candidate=null;
             if(active!=null && (active.world!=c.level || c.player==null || c.player.containerMenu!=active.menu || !SessionContext.serverId(c).equals(active.server))) { active=null; candidate=null; SessionInventoryCache.flush(); }
-            if(active!=null && validate(active)) received(active.menu.containerId,false);
+            if(active!=null) received(active.menu.containerId,false);
         });
     }
     private static boolean validate(Opening o) {
@@ -60,7 +65,7 @@ public final class ContainerRecorder {
     /** Invoked only AFTER vanilla has applied a server packet on the client thread. */
     public static void received(int id,boolean full) {
         Opening o=active; var c=Minecraft.getInstance();
-        if(o==null||o.world!=c.level||c.player==null||c.player.containerMenu!=o.menu||id!=o.menu.containerId||!validate(o)) return;
+        if(o==null||o.world!=c.level||c.player==null||c.player.containerMenu!=o.menu||id!=o.menu.containerId) return;
         if(full) o.synchronizedMenu=true;
         snapshotMenu(o);
     }
@@ -68,25 +73,28 @@ public final class ContainerRecorder {
      * whose initial full packet has been applied; later corrections overwrite this observation. */
     private static void snapshotMenu(Opening o) {
         if(!o.synchronizedMenu||Minecraft.getInstance().level!=o.world||!validate(o)) return;
-        TrackedStorageStore.observe(o,o.adapter.copyItems());
-        if(!SessionInventoryCache.isRecording()||TrackedStorageStore.personal(o))return;
-        try { writeMenu(o); }
+        boolean resources=StorageSettings.INSTANCE.resourceTracking&&TrackedStorageStore.tracked(o);
+        boolean schematic=SessionInventoryCache.isRecording()&&!TrackedStorageStore.personal(o);
+        if(!resources&&!schematic)return;
+        if(!o.adapter.matchesItems(o.observedItems))o.observedItems=o.adapter.copyItems();
+        if(resources)TrackedStorageStore.observe(o,o.observedItems);
+        if(!schematic)return;
+        try { writeMenu(o,o.observedItems); }
         catch(RuntimeException e) {
             PersistentInventoryStore.error="Inventory serialization failed: "+e.getMessage();
             org.slf4j.LoggerFactory.getLogger("StoragePreview").error(PersistentInventoryStore.error,e);
             var c=Minecraft.getInstance();if(c.player!=null)c.player.sendOverlayMessage(net.minecraft.network.chat.Component.translatable("storage.serialization_error"));
         }
     }
-    private static void writeMenu(Opening o) {
-        List<ItemStack> items=o.adapter.copyItems();
+    private static void writeMenu(Opening o,List<ItemStack> items) {
         if(o.previous!=null && ItemStack.listMatches(o.previous,items)) return;
-        o.previous=items;
         for(int i=0;i<o.adapter.halves().size();i++) {
             BlockPos pos=o.adapter.halves().get(i); var be=o.world.getBlockEntity(pos); if(be==null) continue;
             int size=o.adapter.halfSize(); CompoundTag tag=InventoryData.encode(items.subList(i*size,(i+1)*size),o.world.registryAccess());
             tag.putString("id",BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType()).toString());
             SessionInventoryCache.put(new CacheKey(o.server,o.dimension,pos),new ContainerSnapshot(BuiltInRegistries.BLOCK.getKey(o.states.get(i).getBlock()).toString(),o.states.get(i).toString(),size,System.currentTimeMillis(),SharedConstants.getCurrentVersion().dataVersion().version(),tag));
         }
+        o.previous=items;
     }
     public static void recordingChanged() { if(active!=null) active.previous=null; }
 }

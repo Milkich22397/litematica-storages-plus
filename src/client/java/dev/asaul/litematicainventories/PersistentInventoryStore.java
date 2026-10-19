@@ -13,6 +13,8 @@ public final class PersistentInventoryStore {
     private static final Path FILE = StorageSettings.DIRECTORY.resolve("containers.nbt");
     public static volatile String error = "";
     private static boolean primaryValid;
+    private static final java.util.concurrent.atomic.AtomicBoolean writeFailed=new java.util.concurrent.atomic.AtomicBoolean();
+    public static boolean takeWriteFailure(){return writeFailed.getAndSet(false);}
     public static java.util.concurrent.CompletableFuture<Map<CacheKey,ContainerSnapshot>> loadAsync() { return java.util.concurrent.CompletableFuture.supplyAsync(PersistentInventoryStore::load,IO); }
     public static Map<CacheKey,ContainerSnapshot> load() {
         for (Path p : List.of(FILE, FILE.resolveSibling("containers.nbt.bak"))) {
@@ -52,16 +54,22 @@ public final class PersistentInventoryStore {
             Path temp=FILE.resolveSibling("containers.nbt.tmp");
             NbtIo.writeCompressed(tag,temp);
             try (var channel = java.nio.channels.FileChannel.open(temp,StandardOpenOption.WRITE)) { channel.force(true); }
-            if (primaryValid && Files.exists(FILE)) { Path bt=FILE.resolveSibling("backup.tmp"); Files.copy(FILE,bt,StandardCopyOption.REPLACE_EXISTING); replace(bt,FILE.resolveSibling("containers.nbt.bak")); }
             replace(temp,FILE); primaryValid=true;
             // Mirror the successful generation: a clear must not resurrect deleted data via backup.
             Path bt=FILE.resolveSibling("backup.tmp"); Files.copy(FILE,bt,StandardCopyOption.REPLACE_EXISTING); replace(bt,FILE.resolveSibling("containers.nbt.bak"));
             error="";
-        } catch (Exception ex) { error="Cache write failed: "+ex.getMessage(); LoggerFactory.getLogger("StoragePreview").error(error,ex); }
+        } catch (Exception ex) { writeFailed.set(true);error="Cache write failed: "+ex.getMessage(); LoggerFactory.getLogger("StoragePreview").error(error,ex); }
     }
     public static void replace(Path from, Path to) throws java.io.IOException {
         try { Files.move(from,to,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE); }
         catch (AtomicMoveNotSupportedException e) { Files.move(from,to,StandardCopyOption.REPLACE_EXISTING); }
     }
-    public static void awaitWrites() { try { IO.submit(() -> {}).get(10,TimeUnit.SECONDS); } catch (Exception e) { error="Cache flush timed out"; } }
+    public static void awaitWrites() {
+        try {
+            ScheduledFuture<?> scheduled; synchronized(PersistentInventoryStore.class){scheduled=pending;}
+            long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);
+            if(scheduled!=null&&!scheduled.isCancelled())scheduled.get(10,TimeUnit.SECONDS);
+            IO.submit(() -> {}).get(Math.max(1,deadline-System.nanoTime()),TimeUnit.NANOSECONDS);
+        } catch (Exception e) { error="Cache flush failed: "+e.getMessage();LoggerFactory.getLogger("StoragePreview").error(error,e); }
+    }
 }

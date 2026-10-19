@@ -75,15 +75,23 @@ public final class SchematicInventoryResolver {
     public record Resolution(SchematicPlacement placement, List<Expected> halves, String status) {}
     public static Resolution resolve(ContainerRecorder.Opening o) {
         var manager=DataManager.getSchematicPlacementManager(); var selected=manager.getSelectedSchematicPlacement();
-        List<SchematicPlacement> candidates=manager.getAllSchematicsPlacements().stream().filter(SchematicPlacement::isEnabled).filter(p->o.adapter.halves().stream().anyMatch(pos->at(p,pos)!=null)).sorted(Comparator.comparing(p->p.getHashId().toString())).toList();
-        SchematicPlacement p=selected!=null&&candidates.contains(selected)?selected:candidates.size()==1?candidates.getFirst():null;
-        if(p==null) return new Resolution(null,List.of(),candidates.isEmpty()?"no_placement":"ambiguous");
+        // Explicit selection wins in the original behavior, so avoid decoding every other placement.
+        Resolution chosen=null;
+        if(selected!=null&&selected.isEnabled()){chosen=resolvePlacement(o,selected);if(chosen!=null)return chosen;}
+        for(var p:manager.getAllSchematicsPlacements()){
+            if(p==selected||!p.isEnabled())continue;
+            var found=resolvePlacement(o,p);if(found==null)continue;
+            if(chosen!=null)return new Resolution(null,List.of(),"ambiguous");chosen=found;
+        }
+        return chosen==null?new Resolution(null,List.of(),"no_placement"):chosen;
+    }
+    private static Resolution resolvePlacement(ContainerRecorder.Opening o,SchematicPlacement p){
         List<Expected> halves=new ArrayList<>();
         for(int i=0;i<o.adapter.halves().size();i++) {
             Expected e=at(p,o.adapter.halves().get(i));
             if(e!=null && !compatible(e.state,o.states.get(i))) e=new Expected(e.pos,e.state,List.of(),false,true,0,e.source);
             halves.add(e);
         }
-        return new Resolution(p,Collections.unmodifiableList(halves),"ready");
+        return halves.stream().anyMatch(Objects::nonNull)?new Resolution(p,Collections.unmodifiableList(halves),"ready"):null;
     }
 }

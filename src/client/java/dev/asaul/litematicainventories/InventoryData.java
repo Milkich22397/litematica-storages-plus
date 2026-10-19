@@ -2,27 +2,21 @@ package dev.asaul.litematicainventories;
 import net.minecraft.nbt.*;
 import net.minecraft.core.*;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.ContainerHelper;
-import net.minecraft.world.level.storage.TagValueOutput;
-import net.minecraft.util.ProblemReporter;
 import java.util.*;
 
 public final class InventoryData {
     public static final String OBSERVATION = "litematicainventories:observation";
     public static CompoundTag encode(List<ItemStack> stacks, HolderLookup.Provider registries) {
-        NonNullList<ItemStack> items=NonNullList.withSize(stacks.size(),ItemStack.EMPTY);
+        var list=new ListTag();
         var ops=registries.createSerializationContext(NbtOps.INSTANCE);
-        for(int i=0;i<items.size();i++) {
+        for(int i=0;i<stacks.size();i++) {
             ItemStack stack=stacks.get(i);
-            if(!stack.isEmpty()) ItemStack.CODEC.encodeStart(ops,stack).getOrThrow();
-            items.set(i,stack.copy());
+            if(stack.isEmpty())continue;
+            var encoded=ItemStack.CODEC.encodeStart(ops,stack).getOrThrow();
+            if(!(encoded instanceof CompoundTag item))throw new IllegalArgumentException("Invalid encoded stack");
+            item.putByte("Slot",(byte)i);list.add(item);
         }
-        TagValueOutput out=TagValueOutput.createWithContext(ProblemReporter.DISCARDING,registries);
-        ContainerHelper.saveAllItems(out,items,true);
-        CompoundTag tag=out.buildResult();
-        long nonempty=stacks.stream().filter(s->!s.isEmpty()).count();
-        if (!tag.contains("Items")) {if(nonempty>0)throw new IllegalArgumentException("Inventory serialization omitted nonempty items");tag.put("Items",new ListTag());}
-        if(tag.getListOrEmpty("Items").size()!=nonempty)throw new IllegalArgumentException("Incomplete inventory serialization");
+        var tag=new CompoundTag();tag.put("Items",list);
         return tag;
     }
     /** Fail closed on unknown ids/components, duplicate or out-of-range slots. */

@@ -42,6 +42,8 @@ public abstract class ContainerScreenMixin extends Screen {
     @Inject(method="removed",at=@At("HEAD"))
     private void storage$close(CallbackInfo ci){storage$buttonPressed=false;if(storage$tracking!=null)storage$tracking.finishDrag();}
     @Shadow protected Slot hoveredSlot;
+    @Inject(method="mouseScrolled",at=@At("HEAD"),cancellable=true)
+    private void storage$nestedPage(double x,double y,double horizontal,double vertical,CallbackInfoReturnable<Boolean> ci){if(StorageOverlayRenderer.scrollNested(hoveredSlot,vertical))ci.setReturnValue(true);}
     @Inject(method="extractSlot",at=@At("HEAD"))
     private void storage$background(GuiGraphicsExtractor g,Slot slot,int mx,int my,CallbackInfo ci) {StorageOverlayRenderer.background(g,slot);}
     @Inject(method="extractSlot",at=@At("RETURN"))

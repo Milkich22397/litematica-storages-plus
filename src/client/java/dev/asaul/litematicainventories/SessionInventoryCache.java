@@ -64,9 +64,9 @@ public final class SessionInventoryCache {
         if(immediate) { PersistentInventoryStore.schedule(PersistentInventoryStore.encode(CACHE),true); dirty=false; }
         else if(nextWrite==0) nextWrite=System.currentTimeMillis()+750;
     }
-    public static void tick() { loadReady(false); if(dirty && System.currentTimeMillis()>=nextWrite) { nextWrite=0; dirty(true); } }
-    public static void flush() { loadReady(false); dirty(true); }
-    public static void shutdown() { loadReady(true); dirty(true); PersistentInventoryStore.awaitWrites(); }
+    public static void tick() { loadReady(false);if(PersistentInventoryStore.takeWriteFailure()){dirty=true;nextWrite=System.currentTimeMillis()+1000;} if(dirty && loaded && System.currentTimeMillis()>=nextWrite) { nextWrite=0; dirty(true); } }
+    public static void flush() { loadReady(false); if(dirty)dirty(true); }
+    public static void shutdown() { loadReady(true); if(dirty||PersistentInventoryStore.takeWriteFailure())dirty(true); PersistentInventoryStore.awaitWrites(); }
     public static Map<CacheKey,ContainerSnapshot> snapshot() { loadReady(false); return Map.copyOf(CACHE); }
     public static ContainerSnapshot get(CacheKey key) {
         loadReady(false); ContainerSnapshot s=CACHE.get(key); var c=Minecraft.getInstance();
