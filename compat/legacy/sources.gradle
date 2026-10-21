@@ -1,0 +1,67 @@
+def base=file('../..')
+def target=project.findProperty('target')?.toString() ?: '1.21.11'
+def adapt={ String line ->
+    line=line.replace('InputConstants.Type.KEYBOARD','InputConstants.Type.KEYSYM')
+        .replace('.itemCopies()', '.stream()')
+        .replace('InputConstants.isKeyDown(', 'InputConstants.isKeyDown(Minecraft.getInstance().getWindow(),')
+        .replace('Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;', 'Lcom/mojang/blaze3d/pipeline/RenderPipeline;')
+        .replace('GuiGraphicsExtractor','GuiGraphics')
+        .replace('net.minecraft.client.renderer.state.gui','net.minecraft.client.gui.render.state')
+        .replace('net/minecraft/client/renderer/state/gui','net/minecraft/client/gui/render/state')
+        .replace('Lorg/joml/Matrix3x2fc;', 'Lorg/joml/Matrix3x2f;')
+        .replace('fi.dy.masa.malilib.util.data.ItemType','fi.dy.masa.malilib.util.ItemType')
+        .replace('.keymapping.v1.KeyMappingHelper', '.keybinding.v1.KeyBindingHelper')
+        .replace('KeyMappingHelper', 'KeyBindingHelper')
+        .replace('registerKeyMapping(', 'registerKeyBinding(')
+        .replace('.text(', '.drawString(')
+        .replace(';text(', ';drawString(')
+        .replace('.item(', '.renderItem(')
+        .replace('.itemDecorations(', '.renderItemDecorations(')
+        .replace('client.player.sendOverlayMessage(', 'LegacyMessages.send(client,')
+        .replace('c.player.sendOverlayMessage(', 'LegacyMessages.send(c,')
+        .replace('extractWidgetRenderState','renderWidget')
+        .replace('extractRenderState','render')
+        .replace('extractContents','renderContents')
+        .replace('extractLabels','renderLabels')
+        .replace('extractSlot','renderSlot')
+        .replace('extractTooltip','renderTooltip')
+        .replace('onExtractWorldLast','onRenderWorldLast')
+        .replace('method="addItem"', 'method="submitItem"')
+        .replace('.gui.screen()', '.screen')
+        .replace('.setScreenAndShow(', '.setScreen(')
+        .replace('.gameRenderer.mainRenderTarget()', '.getMainRenderTarget()')
+        .replace('WorldPresets::createTestWorldDimensions','WorldPresets::createFlatWorldDimensions')
+        .replace('new net.minecraft.world.level.LevelSettings.DifficultySettings(net.minecraft.world.Difficulty.PEACEFUL,false,false)', 'net.minecraft.world.Difficulty.PEACEFUL')
+        .replace('GameType.SURVIVAL,net.minecraft.world.Difficulty.PEACEFUL,false,net.minecraft.world.level.WorldDataConfiguration.DEFAULT', 'GameType.SURVIVAL,false,net.minecraft.world.Difficulty.PEACEFUL,false,new net.minecraft.world.level.GameRules(net.minecraft.world.flag.FeatureFlags.DEFAULT_FLAGS),net.minecraft.world.level.WorldDataConfiguration.DEFAULT')
+        .replace('ContainerInput.QUICK_MOVE', 'ClickType.QUICK_MOVE')
+        .replace('handleContainerInput(', 'handleInventoryMouseClick(')
+        .replace('.resizeGui()', '.resizeDisplay()')
+        .replace('new CharacterEvent(cp)', 'new CharacterEvent(cp,0)')
+        .replace('new net.minecraft.client.input.CharacterEvent(cp)', 'new net.minecraft.client.input.CharacterEvent(cp,0)')
+        .replace('(DeltaTracker delta,Camera camera,float tick,ProfilerFiller profiler)', '(org.joml.Matrix4f modelView,org.joml.Matrix4f projection)')
+        .replace('Args args,GuiItemRenderState item,GuiItemAtlas.SlotView slot', 'Args args,GuiItemRenderState item,float u,float v,int x,int y')
+        .replace('renderedHeight=hud.render(g,', 'renderedHeight=hud.render(fi.dy.masa.malilib.render.GuiContext.fromGuiGraphics(g),')
+        .replace('"net.minecraft.client.gui.screens.inventory.AbstractContainerScreen"', 'net.minecraft.client.gui.screens.inventory.AbstractContainerScreen.class.getName()')
+        .replace('getDeclaredMethod("onMove",', 'getDeclaredMethod(LegacyCursorName.method(),')
+        .replace('c.disconnect(new net.minecraft.client.gui.screens.TitleScreen(),false)', 'LegacyTestDisconnect.disconnect(c)')
+    if(line=='import net.minecraft.client.gui.render.GuiItemAtlas;')return ''
+    if(target=='1.21.11')line=line.replace('net.minecraft.world.level.GameRules(', 'net.minecraft.world.level.gamerules.GameRules(')
+    if(line.contains('.mouseHandler.onMove('))line=line.replace('*scale,0,0)', '*scale)').replace('c.mouseHandler.onMove(', 'PortSmokeAccess.move(c.mouseHandler,')
+    return line
+}
+['client','smoke'].each { name ->
+    def generated=layout.buildDirectory.dir("generated/sources/${name}")
+    def task=tasks.register("prepare${name.capitalize()}CompatibilitySources",Sync) {
+        from(new File(base,"src/${name}/java")) { exclude '**/ClientScreenAccess.java'; filter { line -> adapt(line) } }
+        if(name=='client')from('java')
+        if(name=='smoke'){
+            from(new File(base,'compat/smoke')) { filter { line -> adapt(line) } }
+            from('smoke')
+        }
+        into(generated); filteringCharset='UTF-8'
+        inputs.property('target',target); inputs.file('sources.gradle')
+    }
+    sourceSets.named(name) { java.setSrcDirs([generated]) }
+    tasks.named("compile${name.capitalize()}Java") { dependsOn task }
+    tasks.named('sourcesJar') { dependsOn task }
+}

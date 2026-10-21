@@ -3,6 +3,27 @@ plugins {
     id 'maven-publish'
 }
 
+def target = findProperty('target')?.toString()
+if (target != null) {
+    if (!(target in ['26.1', '26.2'])) throw new GradleException("Unsupported compatibility target: ${target}")
+    def profile = new Properties()
+    file("compat/${target}.properties").withInputStream { profile.load(it) }
+    profile.each { key, value -> project.ext.set(key.toString(), value.toString()) }
+    if(project.hasProperty('testMinecraft')) {
+        def game=project.property('testMinecraft').toString()
+        if(!(game in ['26.1','26.1.1','26.1.2','26.2']))throw new GradleException("Unsupported test client: ${game}")
+        project.ext.set('minecraft_version',game)
+    }
+    layout.buildDirectory = file("build/compat-${project.minecraft_version}")
+}
+def compat = target != null
+def dependencyDir = compat ? 'libs/compat' : 'libs'
+def apiModules = compat ? "libs/compat/fabric-api-modules-${project.fabric_api_version}" : project.fabric_api_version == '0.161.0+26.3' ? 'libs/fabric-api-modules' : "libs/fabric-api-modules-${project.fabric_api_version}"
+def metadata = [version: project.mod_version,
+                game_range: compat ? project.game_range : '>=26.3 <26.4',
+                litematica_range: compat ? project.litematica_range : '>=0.29.1 <0.30.0',
+                malilib_range: compat ? project.malilib_range : '>=0.30.2 <0.31.0',
+                fabric_range: compat ? project.fabric_range : '>=0.161.0']
 version = project.mod_version
 group = project.maven_group
 
@@ -17,36 +38,39 @@ repositories {
 loom {
     splitEnvironmentSourceSets()
     mods {
-        litematicainventories {
-            sourceSet sourceSets.client
+        if (!project.hasProperty('binaryUnderTest')) {
+            litematicainventories {
+                sourceSet sourceSets.client
+            }
         }
     }
 }
 
 dependencies {
+    if (project.hasProperty('binaryUnderTest')) { runtimeOnly files(project.property('binaryUnderTest')) }
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-    implementation files("libs/fabric-api-${project.fabric_api_version}.jar")
-    compileOnly fileTree(dir: project.fabric_api_version == '0.161.0+26.3' ? 'libs/fabric-api-modules' : "libs/fabric-api-modules-${project.fabric_api_version}", include: '*.jar')
-    implementation files('libs/litematica-fabric-26.3-0.29.1.jar')
-    implementation files('libs/malilib-fabric-26.3-0.30.2.jar')
-    compileOnly files('libs/modmenu-21.0.0.jar')
+    implementation files("${dependencyDir}/fabric-api-${project.fabric_api_version}.jar")
+    compileOnly fileTree(dir: apiModules, include: '*.jar')
+    implementation files(compat ? "${dependencyDir}/${project.litematica_jar}" : 'libs/litematica-fabric-26.3-0.29.1.jar')
+    implementation files(compat ? "${dependencyDir}/${project.malilib_jar}" : 'libs/malilib-fabric-26.3-0.30.2.jar')
+    compileOnly files(compat ? "${dependencyDir}/${project.modmenu_jar}" : 'libs/modmenu-21.0.0.jar')
     if (project.hasProperty('withChestTracker')) { runtimeOnly fileTree(dir: 'libs/integration', include: '*.jar') }
-    if (project.hasProperty('withModMenu')) { runtimeOnly files('libs/modmenu-21.0.0.jar') }
+    if (project.hasProperty('withModMenu')) { runtimeOnly files(compat ? "${dependencyDir}/${project.modmenu_jar}" : 'libs/modmenu-21.0.0.jar') }
 }
 
 processResources {
-    inputs.property 'version', project.version
+    inputs.properties metadata
     filesMatching('fabric.mod.json') {
-        expand 'version': project.version
+        expand metadata
     }
 }
 
 tasks.named('processClientResources', ProcessResources) {
-    inputs.property 'version', project.version
+    inputs.properties metadata
     filesMatching('fabric.mod.json') {
-        expand 'version': project.version
+        expand metadata
     }
 }
 
@@ -89,6 +113,15 @@ if (project.hasProperty('integrationTests')) {
             smoke { client(); source sourceSets.smoke; runDir 'run-smoke'; vmArg '-Xmx2G'; vmArg '-Dmixin.debug.export=true' }
         }
     }
+}
+
+if (compat) {
+    // Keep one maintained implementation; only adapt renamed version-specific APIs.
+    apply from: 'compat/sources.gradle'
+}
+if (project.hasProperty('binaryUnderTest')) {
+    sourceSets.smoke.runtimeClasspath = sourceSets.smoke.runtimeClasspath.minus(sourceSets.client.output)
+    loom.runs.smoke.vmArg "-Dstorages.binaryUnderTest=${file(project.property('binaryUnderTest')).absolutePath}"
 }
 
 

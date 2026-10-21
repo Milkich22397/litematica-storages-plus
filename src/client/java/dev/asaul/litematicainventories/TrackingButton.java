@@ -39,7 +39,7 @@ public final class TrackingButton extends AbstractWidget {
         // A small status mark leaves the PNG background completely transparent.
         if(tracked)g.fill(x+12,y+10,x+15,y+13,0xFF55DD77);
         var text=Component.translatable(edit?"storages.track.drag":!StorageSettings.INSTANCE.resourceTracking?"storages.disabled":!o.synchronizedMenu?"storage.status.sync":tracked?"storages.track.remove":"storages.track.add");
-        setMessage(text);if(isHovered&&!pressed)g.setTooltipForNextFrame(Minecraft.getInstance().font,text.copy().append("\n").append(Component.translatable("storages.track.hold")),mx,my);
+        setMessage(text);if(isHovered&&!pressed)g.setTooltipForNextFrame(Minecraft.getInstance().font,java.util.List.of(text,Component.translatable("storages.track.hold")),java.util.Optional.empty(),mx,my);
     }
     @Override public boolean isMouseOver(double x,double y){return shown()&&super.isMouseOver(x,y);}
     @Override public void onClick(MouseButtonEvent event,boolean doubleClick){

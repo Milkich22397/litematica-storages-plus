@@ -1,0 +1,36 @@
+def selectedTarget = project.property('target').toString()
+def adaptLine = { String line ->
+    line = line.replace('InputConstants.Type.KEYBOARD', 'InputConstants.Type.KEYSYM')
+               .replace('.itemCopies()', '.allItemsCopyStream()')
+               .replace('InputConstants.isKeyDown(', 'InputConstants.isKeyDown(Minecraft.getInstance().getWindow(),')
+               .replace('Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;', 'Lcom/mojang/blaze3d/pipeline/RenderPipeline;')
+    if(line.contains('@ModifyArgs')&&line.contains('BlitRenderState;<init>')){
+        def descriptor=(line =~ /target="([^"]+)"/)[0][1]
+        def older=descriptor.replace('Lorg/joml/Matrix3x2fc;', 'Lorg/joml/Matrix3x2f;')
+        line=line.replace("at=@At(value=\"INVOKE\",target=\"${descriptor}\")", "at={@At(value=\"INVOKE\",target=\"${descriptor}\"),@At(value=\"INVOKE\",target=\"${older}\")}")
+    }
+    // Shared access also makes the 26.1.x bytecode usable on 26.2.
+    line = line.replace('Minecraft.getInstance().gui.screen()', 'ClientScreenAccess.get(Minecraft.getInstance())')
+               .replace('client.gui.screen()', 'ClientScreenAccess.get(client)')
+               .replace('mc.gui.screen()', 'ClientScreenAccess.get(mc)')
+               .replace('c.gui.screen()', 'ClientScreenAccess.get(c)')
+    // SDL adds two motion deltas in 26.3; older smoke clients use the GLFW callback.
+    if (line.contains('.mouseHandler.onMove(')) line=line.replace('*scale,0,0)', '*scale)')
+    line=line.replace('c.mouseHandler.onMove(', 'PortSmokeAccess.move(c.mouseHandler,')
+    if(selectedTarget=='26.1')line=line.replace('.gameRenderer.mainRenderTarget()', '.getMainRenderTarget()').replace('WorldPresets::createTestWorldDimensions', 'WorldPresets::createFlatWorldDimensions')
+    return line
+}
+['client', 'smoke'].each { name ->
+    def generated = layout.buildDirectory.dir("generated/sources/${name}")
+    def prepare = tasks.register("prepare${name.capitalize()}CompatibilitySources", Sync) {
+        from("src/${name}/java") { filter { line -> adaptLine(line) } }
+        if(name=='smoke')from('compat/smoke')
+        into(generated)
+        filteringCharset = 'UTF-8'
+        inputs.property('compatibilityTarget', selectedTarget)
+        inputs.file('compat/sources.gradle')
+    }
+    sourceSets.named(name) { java.setSrcDirs([generated]) }
+    tasks.named("compile${name.capitalize()}Java") { dependsOn prepare }
+    tasks.named('sourcesJar') { dependsOn prepare }
+}

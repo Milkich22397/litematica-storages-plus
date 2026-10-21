@@ -32,6 +32,8 @@ Browse tracked storages, search their saved contents (including items inside shu
 
 Organize storages into persistent groups and choose which group supplies resources to both the Material List and Info HUD. Bind a group to an individual schematic file for separate resource sources per schematic. These bindings do not reserve items.
 
+Collapse group headings or hold the left mouse button on a storage and drag it to another group. Display filtering and the group used for resource counts are independent. In an open tracked container, click its title to edit its local name: Enter saves, Escape cancels the edit, and clicking elsewhere or closing the menu saves it.
+
 An optional resource-source breakdown shows inventory, ender chest and selected storage totals. It is disabled by default. Shulker-box comparisons show a compact summary; hold Shift for internal slot differences and use Shift + mouse wheel to browse longer comparisons.
 
 Container comparisons use individual slots. The old whole-container comparison mode and F7 shortcut have been removed.
@@ -50,8 +52,8 @@ Schematic recording and resource tracking are independent. You can use tracked r
 
 ## Requirements
 
-- **Java 25**
-- Minecraft Java Edition **26.3**
+- Minecraft Java Edition **1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, or 26.3**
+- **Java 21 or later** for 1.21.11; **Java 25 or later** for 26.x
 - **Fabric Loader**
 - **Fabric API**
 - **Litematica**
@@ -59,16 +61,30 @@ Schematic recording and resource tracking are independent. You can use tracked r
 
 **Mod Menu** is optional. Tested alongside **Chest Tracker 2.8.4+26.3**.
 
+Choose the artifact matching your Minecraft version and install only one copy of the addon:
+
+| Minecraft | Addon artifact |
+| --- | --- |
+| 1.21.11 | `litematica-storages-plus-1.3.1+mc1.21.11.jar` |
+| 26.1 / 26.1.1 / 26.1.2 / 26.2 | `litematica-storages-plus-1.3.1+mc26.1-26.2.jar` (one shared file) |
+| 26.3 | `litematica-storages-plus-1.3.1+mc26.3.jar` |
+
+Fabric API, Litematica and MaLiLib must match the game version. See [BUILDING.md](BUILDING.md) for the tested dependency versions. The Chest Tracker compatibility run above applies to 26.3; it is not a compatibility claim for every older Chest Tracker release.
+
 Install the addon and its required dependencies in your client’s `mods` folder. No server-side installation is required.
 
 ## Settings and compatibility
 
 Press **F10** to access addon settings, resource accounting, tracking icon options, and saved-data controls.
 
+The window has **Storages**, **Preferences**, and **Data management** tabs. The sidebar provides contextual details, search, recording and overlay switches, Reset, Cancel, and Done. Search finds storage names, groups, coordinates and saved items, or settings by name and description. Destructive data operations require confirmation.
+
 The addon changes resource counts displayed in the Material List and Info HUD. It does not change which items are physically available to Easy Place.
 
 English, modern Russian and pre-reform Russian (`rpr`) translations are included.
 
 ## Building and release notes
+
+The repository maintains one shared implementation in `src/`. Version profiles and API adaptations live in `compat/`; generated sources stay under ignored build directories. Separate copies of the entire mod are not required for each Minecraft version.
 
 See [BUILDING.md](BUILDING.md) for dependencies and build instructions, and [CHANGELOG-1.1.0.md](CHANGELOG-1.1.0.md) for the 1.1.0 release notes.

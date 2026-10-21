@@ -1,0 +1,89 @@
+plugins {
+    id 'net.fabricmc.fabric-loom-remap' version '1.17.21'
+    id 'maven-publish'
+}
+
+def implementationRoot = file('../..')
+def target = findProperty('target')?.toString() ?: '1.21.11'
+if(target!='1.21.11')throw new GradleException("Unsupported legacy client: ${target}")
+def profile=new Properties()
+new File(implementationRoot,"compat/${target}.properties").withInputStream { profile.load(it) }
+profile.each { key,value -> project.ext.set(key.toString(),value.toString()) }
+version=project.mod_version
+group='dev.asaul'
+base { archivesName='litematica-storages-plus' }
+layout.buildDirectory=new File(implementationRoot,"build/compat-${target}")
+repositories { mavenCentral() }
+loom {
+    splitEnvironmentSourceSets()
+    mods { litematicainventories { sourceSet sourceSets.client } }
+}
+dependencies {
+    minecraft "com.mojang:minecraft:${target}"
+    mappings loom.officialMojangMappings()
+    modImplementation 'net.fabricmc:fabric-loader:0.19.5'
+    modImplementation files(new File(implementationRoot,"libs/compat/fabric-api-${project.fabric_api_version}.jar"))
+    modImplementation fileTree(dir:new File(implementationRoot,"libs/compat/fabric-api-modules-${project.fabric_api_version}"),include:'*.jar')
+    modImplementation fileTree(dir:new File(implementationRoot,"libs/compat/legacy-support-${target}"),include:'conditional-*.jar')
+    modImplementation files(new File(implementationRoot,"libs/compat/${project.litematica_jar}"))
+    modImplementation files(new File(implementationRoot,"libs/compat/${project.malilib_jar}"))
+    modCompileOnly files(new File(implementationRoot,"libs/compat/${project.modmenu_jar}"))
+    if(project.hasProperty('withModMenu'))modRuntimeOnly files(new File(implementationRoot,"libs/compat/${project.modmenu_jar}"))
+}
+java { withSourcesJar(); sourceCompatibility=JavaVersion.VERSION_21; targetCompatibility=JavaVersion.VERSION_21 }
+tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }
+tasks.withType(AbstractArchiveTask).configureEach { preserveFileTimestamps=false; reproducibleFileOrder=true }
+def metadata=[version:project.mod_version,game_range:project.game_range,litematica_range:project.litematica_range,malilib_range:project.malilib_range,fabric_range:project.fabric_range]
+tasks.named('processClientResources',ProcessResources) {
+    from(new File(implementationRoot,'src/client/resources'))
+    inputs.properties metadata
+    filesMatching('fabric.mod.json') { expand metadata; filter { line -> line.replace('>=25','>=21') } }
+    filesMatching('litematicainventories.mixins.json') { filter { line -> line.replace('JAVA_25','JAVA_21') } }
+}
+jar { from(new File(implementationRoot,'LICENSE')) }
+sourceSets {
+    logicTest { java.srcDir new File(implementationRoot,'src/logicTest/java'); compileClasspath+=sourceSets.client.output; runtimeClasspath+=sourceSets.client.output }
+    smoke { compileClasspath+=sourceSets.client.output+sourceSets.client.compileClasspath; runtimeClasspath+=sourceSets.client.output+sourceSets.client.runtimeClasspath }
+}
+tasks.named('processSmokeResources',ProcessResources) { from(new File(implementationRoot,'src/smoke/resources')) }
+tasks.register('logicTest',JavaExec) { dependsOn tasks.named('compileLogicTestJava'); classpath=sourceSets.logicTest.runtimeClasspath; mainClass='dev.asaul.litematicainventories.LogicTests' }
+tasks.named('check') { dependsOn tasks.named('logicTest') }
+apply from: 'sources.gradle'
+if(project.hasProperty('integrationTests')) {
+    loom {
+        mods { storagepreviewtests { sourceSet sourceSets.smoke } }
+        runs { smoke { client(); source sourceSets.smoke; runDir '../../run-smoke'; vmArg '-Xmx2G'; vmArg '-Dmixin.debug.export=true' } }
+    }
+    tasks.named('runSmoke') {
+        doFirst { java.nio.file.Files.deleteIfExists(new File(implementationRoot,'run-smoke/smoke-result.txt').toPath()) }
+        doLast { def result=new File(implementationRoot,'run-smoke/smoke-result.txt'); if(!result.exists()||result.text.contains('FAIL')||!result.text.contains('LIVE PASS: container'))throw new GradleException('Legacy Minecraft integration check failed; see run-smoke/smoke-result.txt') }
+    }
+    def smokeJar=tasks.register('smokeJar',Jar) {
+        dependsOn tasks.named('smokeClasses')
+        archiveClassifier='testmod-dev'
+        from(sourceSets.smoke.output)
+    }
+    def smokeRemap=tasks.register('remapSmokeJar',net.fabricmc.loom.task.RemapJarTask) {
+        dependsOn smokeJar
+        inputFile=smokeJar.flatMap { it.archiveFile }
+        archiveClassifier='testmod'
+        addNestedDependencies=false
+        classpath.from(sourceSets.smoke.compileClasspath)
+    }
+    tasks.register('productionSmoke',net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+        javaLauncher=javaToolchains.launcherFor { languageVersion=JavaLanguageVersion.of(21) }
+        dependsOn smokeRemap,tasks.named('remapJar')
+        def artifact=project.hasProperty('binaryUnderTest')?new File(implementationRoot,project.property('binaryUnderTest').toString()):tasks.named('remapJar').get().archiveFile.get().asFile
+        mods.from artifact
+        mods.from smokeRemap.flatMap { it.archiveFile }
+        mods.from new File(implementationRoot,"libs/compat/fabric-api-${project.fabric_api_version}.jar")
+        mods.from new File(implementationRoot,"libs/compat/${project.litematica_jar}")
+        mods.from new File(implementationRoot,"libs/compat/${project.malilib_jar}")
+        if(project.hasProperty('withModMenu'))mods.from new File(implementationRoot,"libs/compat/${project.modmenu_jar}")
+        runDir=new File(implementationRoot,'run-smoke')
+        useXVFB=false
+        jvmArgs.addAll('-Xmx2G','-Dmixin.debug.export=true',"-Dstorages.binaryUnderTest=${artifact.absolutePath}")
+        doFirst { java.nio.file.Files.deleteIfExists(new File(implementationRoot,'run-smoke/smoke-result.txt').toPath()) }
+        doLast { def result=new File(implementationRoot,'run-smoke/smoke-result.txt'); if(!result.exists()||result.text.contains('FAIL')||!result.text.contains('LIVE PASS: container'))throw new GradleException('Production integration failed; inspect run-smoke/smoke-result.txt') }
+    }
+}

@@ -11,6 +11,7 @@ public final class StorageSettings {
     // Legacy aggregate is deliberately ignored by Gson; comparison is always per slot.
     public boolean recording = false, overlay = true;
     public long ttlHours = 168;
+    public long cleanupHours = 168;
     public int maxEntries = 50000;
     public String namespace = "default";
     public int missingColor = 0x665599FF, matchColor = 0xFF55CC77, countColor = 0x66FFCC44;
@@ -26,7 +27,7 @@ public final class StorageSettings {
             Path p = DIRECTORY.resolve("settings.json");
             if (Files.exists(p)) {
                 StorageSettings s = new Gson().fromJson(Files.readString(p), StorageSettings.class);
-                if (s != null) { if(s.trackingPositions==null)s.trackingPositions=new java.util.HashMap<>(); if(s.missingColor==0xFF5599FF)s.missingColor=0x665599FF; if(s.countColor==0xFFFFCC44)s.countColor=0x66FFCC44; if(s.wrongColor==0xFFFF5555)s.wrongColor=0x66FF5555; s.maxEntries = Math.clamp(s.maxEntries, 1, 200000); s.ttlHours = Math.clamp(s.ttlHours, 0, 876000); if (s.namespace == null || s.namespace.isBlank()) s.namespace = "default"; return s; }
+                if (s != null) { if(s.trackingPositions==null)s.trackingPositions=new java.util.HashMap<>(); if(s.missingColor==0xFF5599FF)s.missingColor=0x665599FF; if(s.countColor==0xFFFFCC44)s.countColor=0x66FFCC44; if(s.wrongColor==0xFFFF5555)s.wrongColor=0x66FF5555; s.maxEntries = Math.clamp(s.maxEntries, 1, 200000); s.ttlHours = Math.clamp(s.ttlHours, 0, 876000); s.cleanupHours = Math.clamp(s.cleanupHours, 1, 876000); if (s.namespace == null || s.namespace.isBlank()) s.namespace = "default"; return s; }
             }
         } catch (Exception e) { LoggerFactory.getLogger("StoragePreview").error("Cannot load settings", e); }
         return new StorageSettings();

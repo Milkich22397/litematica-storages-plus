@@ -41,7 +41,10 @@ public final class LitematicaInventoriesClient implements ClientModInitializer {
                 SessionInventoryCache.toggleRecording();
             }
             while (CLEAR_CACHE.consumeClick()) {
-                SessionInventoryCache.clearWorld();
+                boolean container=client.gui.screen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>;
+                var previous=container?null:client.gui.screen();
+                if(container&&client.player!=null)client.player.closeContainer();
+                client.setScreenAndShow(new net.minecraft.client.gui.screens.ConfirmScreen(yes->{if(yes)SessionInventoryCache.clearWorld();client.setScreenAndShow(previous);},net.minecraft.network.chat.Component.translatable("storage.clear.confirm.title"),net.minecraft.network.chat.Component.translatable("storage.clear.world.confirm")));
             }
             while (OPEN_SETTINGS.consumeClick()) {
                 var settings=new SettingsScreen(null); // Capture the container clear scope before closing it.

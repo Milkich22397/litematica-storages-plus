@@ -16,7 +16,7 @@ import java.util.Map;
 
 public final class SessionInventoryCache {
     private static final Map<CacheKey, ContainerSnapshot> CACHE = new HashMap<>();
-    private static final java.util.concurrent.CompletableFuture<Map<CacheKey,ContainerSnapshot>> LOADING=PersistentInventoryStore.loadAsync();
+    private static java.util.concurrent.CompletableFuture<Map<CacheKey,ContainerSnapshot>> LOADING=PersistentInventoryStore.loadAsync();
     private static boolean loaded,clearedAll;
     private static final java.util.Set<String> clearedWorlds=new java.util.HashSet<>();
     private static final java.util.Set<CacheKey> removed=new java.util.HashSet<>();
@@ -26,7 +26,9 @@ public final class SessionInventoryCache {
             var data=wait?LOADING.get(10,java.util.concurrent.TimeUnit.SECONDS):LOADING.join();
             if(!clearedAll) data.forEach((k,v)->{if(!clearedWorlds.contains(k.server())&&!removed.contains(k))CACHE.putIfAbsent(k,v);});
             loaded=true;
+            if(trim())dirty(false);
         }catch(Exception e){PersistentInventoryStore.error="Cache load failed: "+e.getMessage();loaded=true;}
+        finally{LOADING=null;removed.clear();clearedWorlds.clear();clearedAll=false;}
     }
     
 
@@ -45,12 +47,22 @@ public final class SessionInventoryCache {
 
     public static void put(CacheKey key, ContainerSnapshot snapshot) {
         CACHE.put(key, snapshot);
-        while(CACHE.size()>StorageSettings.INSTANCE.maxEntries) CACHE.remove(CACHE.entrySet().stream().min(java.util.Comparator.comparingLong(e -> e.getValue().observedAt())).orElseThrow().getKey());
+        trim();
         dirty(false);
     }
 
+    /** A reduced limit must not perform one full scan for every discarded observation. */
+    private static boolean trim(){
+        int excess=CACHE.size()-StorageSettings.INSTANCE.maxEntries;
+        if(excess<=0)return false;
+        var order=java.util.Comparator.<Map.Entry<CacheKey,ContainerSnapshot>>comparingLong(e->e.getValue().observedAt());
+        if(excess==1)CACHE.remove(CACHE.entrySet().stream().min(order).orElseThrow().getKey());
+        else CACHE.entrySet().stream().sorted(order).limit(excess).map(Map.Entry::getKey).toList().forEach(CACHE::remove);
+        return true;
+    }
+
     public static void clear() {
-        clearedAll=true;
+        if(!loaded)clearedAll=true;
         CACHE.clear();
         dirty(true);
         showActionBar("litematicainventories.cleared");
@@ -73,9 +85,14 @@ public final class SessionInventoryCache {
         if(s!=null && c.level!=null && ClientChunks.loaded(c.level,key.pos()) && key.server().equals(SessionContext.serverId(c)) && key.dimension().equals(SessionContext.dimensionId(c)) && !ContainerMenuAdapter.matchesSnapshotState(s.state(),c.level.getBlockState(key.pos()))) { remove(key); return null; }
         return s;
     }
-    public static void remove(CacheKey key) { removed.add(key); if(CACHE.remove(key)!=null || !loaded) dirty(false); }
-    public static void clearWorld() { var c=Minecraft.getInstance(); String world=SessionContext.serverId(c); clearedWorlds.add(world); CACHE.keySet().removeIf(k->k.server().equals(world)); dirty(true); }
+    public static void remove(CacheKey key) { if(!loaded)removed.add(key); if(CACHE.remove(key)!=null || !loaded) dirty(false); }
+    public static void clearWorld() { var c=Minecraft.getInstance(); String world=SessionContext.serverId(c); if(!loaded)clearedWorlds.add(world); CACHE.keySet().removeIf(k->k.server().equals(world)); dirty(true); }
     public static void clearContainer() { var o=ContainerRecorder.active(); if(o!=null) for(var p:o.adapter.halves()) remove(new CacheKey(o.server,o.dimension,p)); }
+    public static int removeOlderThan(long hours) {
+        if(hours<1||hours>876000)return 0;loadReady(true);long cutoff=System.currentTimeMillis()-hours*3600000L;
+        var keys=CACHE.entrySet().stream().filter(e->e.getValue().observedAt()>0&&e.getValue().observedAt()<cutoff).map(Map.Entry::getKey).toList();
+        keys.forEach(SessionInventoryCache::remove);flush();return keys.size();
+    }
 
     public static int size() {
         loadReady(false); return CACHE.size();

@@ -22,11 +22,11 @@
   ],
   "depends": {
     "fabricloader": ">=0.19.5",
-    "minecraft": ">=26.3 <26.4",
+    "minecraft": "${game_range}",
     "java": ">=25",
-    "fabric-api": ">=0.161.0",
-    "litematica": ">=0.29.1 <0.30.0",
-    "malilib": ">=0.30.2 <0.31.0"
+    "fabric-api": "${fabric_range}",
+    "litematica": "${litematica_range}",
+    "malilib": "${malilib_range}"
   },
   "suggests": {
     "modmenu": "*"

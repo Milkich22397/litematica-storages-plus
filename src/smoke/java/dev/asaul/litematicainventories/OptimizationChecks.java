@@ -70,11 +70,31 @@ public final class OptimizationChecks {
             Thread.sleep(1100);SessionInventoryCache.tick();PersistentInventoryStore.awaitWrites();
             check(PersistentInventoryStore.load().containsKey(retryKey)&&PersistentInventoryStore.error.isBlank(),"failed cache save retries and recovers");
             SessionInventoryCache.remove(retryKey);SessionInventoryCache.flush();PersistentInventoryStore.awaitWrites();
+            cacheBounds(c);
             log.add("OPTIMIZATION PASS: "+checks+" checks; nested items, cached HUD/progress invalidation, unchanged inventory, delayed writes, no redundant flush");
         }finally{
             inventory.clearContent();for(int n=0;n<original.size();n++)inventory.setItem(n,original.get(n));StorageSettings.INSTANCE.includeTrackedResources=mode;
             fi.dy.masa.litematica.config.Configs.Generic.MATERIAL_LIST_COUNT_ENDER_CACHE.setBooleanValue(ender);ResourceAccounting.tick(c);
         }
+    }
+    @SuppressWarnings("unchecked")
+    private static void cacheBounds(Minecraft c)throws Exception{
+        var cacheField=SessionInventoryCache.class.getDeclaredField("CACHE");cacheField.setAccessible(true);
+        var cache=(Map<CacheKey,ContainerSnapshot>)cacheField.get(null);var saved=new HashMap<>(cache);int limit=StorageSettings.INSTANCE.maxEntries;
+        try{
+            var loading=SessionInventoryCache.class.getDeclaredField("LOADING");loading.setAccessible(true);
+            check(loading.get(null)==null,"completed async load releases its source map");
+            var removed=SessionInventoryCache.class.getDeclaredField("removed");removed.setAccessible(true);
+            for(int n=0;n<1000;n++)SessionInventoryCache.remove(new CacheKey("missing-audit","test:dim",new net.minecraft.core.BlockPos(n,0,0)));
+            check(((Set<?>)removed.get(null)).isEmpty(),"post-load removals do not retain tombstones indefinitely");
+            cache.clear();var tag=InventoryData.encode(Collections.nCopies(27,ItemStack.EMPTY),c.level.registryAccess());
+            var keys=new ArrayList<CacheKey>();
+            for(int n=0;n<2000;n++){var key=new CacheKey("audit-limit","test:dim",new net.minecraft.core.BlockPos(n,0,0));keys.add(key);cache.put(key,new ContainerSnapshot("minecraft:chest",net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState().toString(),27,n,net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version(),tag));}
+            StorageSettings.INSTANCE.maxEntries=3;
+            var newest=new CacheKey("audit-limit","test:dim",new net.minecraft.core.BlockPos(2000,0,0));
+            SessionInventoryCache.put(newest,new ContainerSnapshot("minecraft:chest",net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState().toString(),27,2000,net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version(),tag));
+            check(cache.size()==3&&cache.containsKey(keys.get(1998))&&cache.containsKey(keys.get(1999))&&cache.containsKey(newest),"large limit reduction retains only newest observations in one batch");
+        }finally{StorageSettings.INSTANCE.maxEntries=limit;cache.clear();cache.putAll(saved);var dirty=SessionInventoryCache.class.getDeclaredMethod("dirty",boolean.class);dirty.setAccessible(true);dirty.invoke(null,true);PersistentInventoryStore.awaitWrites();}
     }
     private static List<MaterialListEntry> oldHud(MaterialListBase list){
         var ignored=((dev.asaul.litematicainventories.mixin.ResourceMaterialListAccess)list).storages$ignored();var rows=new ArrayList<MaterialListEntry>();

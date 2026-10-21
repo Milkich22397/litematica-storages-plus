@@ -38,6 +38,8 @@ public final class SmokeTests implements ClientModInitializer {
   try{Files.write(Path.of("smoke-result.txt"),log);}catch(Exception e){throw new RuntimeException(e);}c.stop();
  }
  private static void run() throws Exception {
+  String binary=System.getProperty("storages.binaryUnderTest");
+  if(binary!=null){var actual=Path.of(ContainerRecorder.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toRealPath();check(actual.equals(Path.of(binary).toRealPath()),"integration loads the exact distributable JAR rather than development classes");log.add("BINARY PASS: production classes loaded from "+actual.getFileName());}
   // Force all mandatory hooks to transform, including classes not normally loaded by title screen.
   for(String name:List.of("fi.dy.masa.litematica.scheduler.tasks.TaskSaveSchematic","fi.dy.masa.litematica.gui.GuiMaterialList","fi.dy.masa.litematica.materials.MaterialListSchematic","fi.dy.masa.litematica.materials.MaterialListPlacement","net.minecraft.client.gui.screens.inventory.AbstractContainerScreen"))Class.forName(name);
   log.add("Mandatory mixin target classes loaded");

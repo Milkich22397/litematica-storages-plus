@@ -24,6 +24,7 @@ public final class ContainerRecorder {
         public final TrackedStorageStore.Key trackingKey;
         public boolean synchronizedMenu;
         private List<ItemStack> previous;
+        private long lastRecorded;
         private List<ItemStack> observedItems;
         List<ItemStack> resourcePrevious;
         Opening(ClientLevel w,AbstractContainerMenu m,ContainerMenuAdapter a) {world=w;menu=m;adapter=a; var c=Minecraft.getInstance();playerId=c.player.getUUID();server=SessionContext.serverId(c); dimension=SessionContext.dimensionId(c); states=new ArrayList<>(a.halves().stream().map(w::getBlockState).toList());trackingKey=TrackedStorageStore.createKey(this);}
@@ -87,14 +88,15 @@ public final class ContainerRecorder {
         }
     }
     private static void writeMenu(Opening o,List<ItemStack> items) {
-        if(o.previous!=null && ItemStack.listMatches(o.previous,items)) return;
+        long now=System.currentTimeMillis();
+        if(o.previous!=null && ItemStack.listMatches(o.previous,items)&&now-o.lastRecorded<60_000) return;
         for(int i=0;i<o.adapter.halves().size();i++) {
             BlockPos pos=o.adapter.halves().get(i); var be=o.world.getBlockEntity(pos); if(be==null) continue;
             int size=o.adapter.halfSize(); CompoundTag tag=InventoryData.encode(items.subList(i*size,(i+1)*size),o.world.registryAccess());
             tag.putString("id",BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType()).toString());
             SessionInventoryCache.put(new CacheKey(o.server,o.dimension,pos),new ContainerSnapshot(BuiltInRegistries.BLOCK.getKey(o.states.get(i).getBlock()).toString(),o.states.get(i).toString(),size,System.currentTimeMillis(),SharedConstants.getCurrentVersion().dataVersion().version(),tag));
         }
-        o.previous=items;
+        o.previous=items;o.lastRecorded=now;
     }
     public static void recordingChanged() { if(active!=null) active.previous=null; }
 }

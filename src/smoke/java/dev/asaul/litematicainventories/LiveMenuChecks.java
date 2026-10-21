@@ -146,7 +146,7 @@ public final class LiveMenuChecks {
     var button=((dev.asaul.litematicainventories.mixin.GuiBaseButtonsAccess)parent).storage$buttons().stream().filter(b->((String)uncheckedField(b,fi.dy.masa.malilib.gui.button.ButtonBase.class,"displayString")).equals(net.minecraft.network.chat.Component.translatable("storage.tab").getString())).findFirst().orElseThrow();
     check(button.getY()>=24,"entry button is in toolbar below title");parent.onMouseClicked(click(button.getX()+4,button.getY()+4),false);check(c.gui.screen() instanceof StorageMaterialScreen,"native toolbar button opens storage list");next(8);}}
    case 8 -> {if(ticks==30){nativeUiChecks(c);screenshot(c,"storage-material-list.png");visualFixture(c,false);c.setScreenAndShow(new SettingsScreen(c.gui.screen()));next(9);}}
-   case 9 -> {if(ticks==30){screenshot(c,"storage-settings.png");SessionInventoryCache.flush();PersistentInventoryStore.awaitWrites();check(PersistentInventoryStore.load().containsKey(key),"live contents persisted");log.add("LIVE PASS: container and material screens rendered at GUI scales 2 and 3; screenshots saved (visual review separate)");
+   case 9 -> {if(ticks==30){MenuUpdateChecks.run(c,log);screenshot(c,"storage-settings.png");SessionInventoryCache.flush();PersistentInventoryStore.awaitWrites();check(PersistentInventoryStore.load().containsKey(key),"live contents persisted");log.add("LIVE PASS: container and material screens rendered at GUI scales 2 and 3; screenshots saved (visual review separate)");
     c.setScreenAndShow(null);c.getSingleplayerServer().execute(()->{var be=(ChestBlockEntity)c.getSingleplayerServer().overworld().getBlockEntity(pos);be.setItem(0,new ItemStack(Items.DIAMOND,32));be.setChanged();});next(10);}}
    case 10 -> {if(ticks==30){open(c);next(11);}}
    case 11 -> {var o=ContainerRecorder.active();if(o!=null&&o.synchronizedMenu&&o.adapter.copyItems().getFirst().getCount()==32){
@@ -157,7 +157,7 @@ public final class LiveMenuChecks {
     log.add("LIVE PASS: vanilla shift-click with overlay moved 32 diamonds and recorder observed the changed synchronized menu");
     ResourceAccounting.tick(c);check(resourceFirst(c)==0&&ResourceAccounting.available(new ItemStack(Items.DIAMOND))==32,"transfer counts 32 once across player and chest");
     log.add("RESOURCE LIVE PASS: vanilla shift-click conserves total without duplicate player/chest resources");
-    c.player.closeContainer();c.setScreenAndShow(new ResourceSettingsScreen(new SettingsScreen(null)));next(120);
+    c.player.closeContainer();c.setScreenAndShow(new DataSettingsScreen(new SettingsScreen(null),List.of()));next(120);
    }}
    case 120 -> {if(ticks==15){nativeClick(c,"storages.clear");check(c.gui.screen() instanceof net.minecraft.client.gui.screens.ConfirmScreen,"clear requires confirmation");next(121);}}
    case 121 -> {if(ticks==10){confirm(c,false);check(!TrackedStorageStore.snapshot().isEmpty(),"cancel preserves tracked data");nativeClick(c,"storages.clear");next(122);}}
@@ -167,7 +167,7 @@ public final class LiveMenuChecks {
    }}
    case 123 -> {if(ticks==30){open(c);next(1231);}}
    case 1231 -> {var o=ContainerRecorder.active();if(o!=null&&o.synchronizedMenu&&tracking(c).active&&o.adapter.copyItems().stream().filter(s->s.is(Items.STONE)).mapToInt(ItemStack::getCount).sum()==320){
-    trackClick(c);StorageSettings.INSTANCE.includeTrackedResources=true;StorageSettings.save();ResourceAccounting.tick(c);check(ResourceAccounting.available(new ItemStack(Items.STONE))==448,"real server chest320 plus player128");
+    trackClick(c);StorageSettings.INSTANCE.includeTrackedResources=true;StorageSettings.save();ResourceAccounting.tick(c);check(ResourceAccounting.available(new ItemStack(Items.STONE))==448,"real server chest320 plus player128: available="+ResourceAccounting.available(new ItemStack(Items.STONE))+", tracked="+TrackedStorageStore.tracked(o)+", selection="+StorageGroups.selection(fi.dy.masa.litematica.data.DataManager.getMaterialList()));
     c.player.closeContainer();var custom=new MaterialListCustom("Storages+ 640 / 448",Map.of(new fi.dy.masa.malilib.util.data.ItemType(new ItemStack(Items.STONE),true,false),640),Path.of("resource-example.json"));
     c.setScreenAndShow(new fi.dy.masa.litematica.gui.GuiMaterialList(custom));var p=ResourceAccounting.progress(custom);check(p.collected()==448&&p.remaining()==192&&p.percent()==70,"real Material List example progress");next(124);
    }}
@@ -177,8 +177,11 @@ public final class LiveMenuChecks {
    case 1242 -> {if(ticks==15){hudChecks.expect(512);StorageSettings.INSTANCE.includeTrackedResources=true;hudChecks.list.setMultiplier(2);next(1243);}}
    case 1243 -> {if(ticks==15){hudChecks.expect(832);hudChecks.list.setMultiplier(1);hudChecks.list.setMaterialListEntries(List.of(new MaterialListEntry(new ItemStack(Items.STONE),448,448,0,128)));next(1244);}}
    case 1244 -> {if(ticks==15){check(hudChecks.renderedHeight==0&&hudChecks.hud.counts.isEmpty(),"fully covered HUD row disappears");hudChecks.list.setMaterialListEntries(List.of(new MaterialListEntry(new ItemStack(Items.STONE),640,640,0,128)));hudChecks.list.ignoreEntry(hudChecks.list.getMaterialsAll().getFirst());next(1245);}}
-   case 1245 -> {if(ticks==15){check(hudChecks.renderedHeight==0&&hudChecks.hud.counts.isEmpty(),"ignored HUD row stays hidden");log.add("HUD LIVE PASS: native renderer width/draw passes: combined192, inventory512, multiplier2=832; fully covered and ignored rows hidden without mutating inventory counts");c.setScreenAndShow(new ResourceSettingsScreen(new SettingsScreen(null)));next(125);}}
-   case 125 -> {if(ticks==25){screenshot(c,"resource-settings.png");StorageUiChecks.start(c,portable);next(1250);}}
+   case 1245 -> {if(ticks==15){check(hudChecks.renderedHeight==0&&hudChecks.hud.counts.isEmpty(),"ignored HUD row stays hidden");log.add("HUD LIVE PASS: native renderer width/draw passes: combined192, inventory512, multiplier2=832; fully covered and ignored rows hidden without mutating inventory counts");c.setScreenAndShow(new DataSettingsScreen(new SettingsScreen(null),List.of()));MenuUpdateChecks.press(c,"ttlHours.label");next(125);}}
+   case 125 -> {if(ticks==25){screenshot(c,"data-management.png");c.setScreenAndShow(new PreferencesScreen(new SettingsScreen(null)));MenuUpdateChecks.press(c,"missingColor.label");next(1251);}}
+   case 1251 -> {if(ticks==15){screenshot(c,"preferences.png");c.getWindow().setWindowed(640,480);c.options.guiScale().set(2);c.resizeGui();c.setScreenAndShow(new DataSettingsScreen(new SettingsScreen(null),List.of()));next(1252);}}
+   case 1252 -> {if(ticks==15){screenshot(c,"data-management-narrow.png");for(var b:((dev.asaul.litematicainventories.mixin.GuiBaseButtonsAccess)c.gui.screen()).storage$buttons())check(b.getX()>=0&&b.getY()>=0&&b.getX()+b.getWidth()<=c.getWindow().getGuiScaledWidth()&&b.getY()+b.getHeight()<=c.getWindow().getGuiScaledHeight(),"data menu button fits narrow screen");c.setScreenAndShow(new PreferencesScreen(new SettingsScreen(null)));next(1253);}}
+   case 1253 -> {if(ticks==15){screenshot(c,"preferences-narrow.png");c.getWindow().setWindowed(1920,1080);c.resizeGui();StorageUiChecks.start(c,portable);next(1250);}}
    case 1250 -> {if(StorageUiChecks.tick(c,log)){TrackedResourceChecks.persistRestartProof();reopenWorld=c.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize().getFileName().toString();c.disconnect(new net.minecraft.client.gui.screens.TitleScreen(),false);next(126);}}
    case 126 -> {if(c.level==null&&ticks>20){
     check(ContainerRecorder.active()==null&&field(null,ContainerRecorder.class,"candidate")==null,"disconnect releases recorder world references");

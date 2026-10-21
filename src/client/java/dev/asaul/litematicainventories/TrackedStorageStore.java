@@ -13,7 +13,8 @@ import org.slf4j.LoggerFactory;
 /** Independent, permanent resource ledger. All mutations and codec work are on the client thread. */
 public final class TrackedStorageStore {
     public record Key(String server,String dimension,String identity) {}
-    public record Entry(Key key,List<BlockPos> positions,List<String> states,int size,int dataVersion,CompoundTag data,boolean valid,String label,String group) {
+    public record Entry(Key key,List<BlockPos> positions,List<String> states,int size,int dataVersion,CompoundTag data,boolean valid,String label,String group,long observedAt) {
+        public Entry(Key key,List<BlockPos> positions,List<String> states,int size,int dataVersion,CompoundTag data,boolean valid,String label,String group){this(key,positions,states,size,dataVersion,data,valid,label,group,0);}
         public Entry(Key key,List<BlockPos> positions,List<String> states,int size,int dataVersion,CompoundTag data,boolean valid){this(key,positions,states,size,dataVersion,data,valid,"","");}
         public Entry {positions=List.copyOf(positions);states=List.copyOf(states);data=data.copy();label=label==null?"":label;group=group==null?"":group;}
         @Override public CompoundTag data(){return data.copy();}
@@ -58,12 +59,16 @@ public final class TrackedStorageStore {
         load();if(o==null||!o.synchronizedMenu)return;
         if(tracked(o)){removeMatching(o);changed();flush();return;}
         if(entries.size()>=50000){error="Tracked storage limit reached (50000)";return;}
-        observeNew(o,o.adapter.copyItems());flush();
+        var items=o.adapter.copyItems();if(observeNew(o,items))o.resourcePrevious=items;flush();
     }
     public static void observe(ContainerRecorder.Opening o,List<ItemStack> items){
         load();if(!StorageSettings.INSTANCE.resourceTracking||!o.synchronizedMenu||!tracked(o))return;
         var old=entries.get(key(o));
-        if(old!=null&&old.valid&&old.dataVersion==net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version()&&o.resourcePrevious!=null&&ItemStack.listMatches(o.resourcePrevious,items))return;
+        if(old!=null&&old.valid&&old.dataVersion==net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version()&&o.resourcePrevious!=null&&ItemStack.listMatches(o.resourcePrevious,items)){
+            long now=System.currentTimeMillis();
+            if(old.observedAt==0||now-old.observedAt>=60_000){entries.put(old.key,new Entry(old.key,old.positions,old.states,old.size,old.dataVersion,old.data,true,old.label,old.group,now));changed();}
+            return;
+        }
         if(observeNew(o,items))o.resourcePrevious=items;
     }
     private static boolean observeNew(ContainerRecorder.Opening o,List<ItemStack> items){
@@ -71,17 +76,19 @@ public final class TrackedStorageStore {
             var k=key(o);var data=InventoryData.encode(items,o.world.registryAccess());
             var states=personal(o)?List.<String>of():o.states.stream().map(ContainerMenuAdapter::identityState).toList();var old=entries.get(k);
             int version=net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version();
-            if(old!=null&&old.valid&&old.dataVersion==version&&old.states.equals(states)&&old.data.equals(data))return true;
+            if(old!=null&&old.valid&&old.dataVersion==version&&old.states.equals(states)&&old.data.equals(data)){long now=System.currentTimeMillis();if(old.observedAt==0||now-old.observedAt>=60_000){entries.put(k,new Entry(k,old.positions,old.states,old.size,old.dataVersion,old.data,true,old.label,old.group,now));changed();}return true;}
             // Keep labels/groups when a double chest topology changes.
             var details=old; if(details==null)for(var matched:matching(o)){details=entries.get(matched);if(details!=null)break;}
             removeMatching(o);
-            var entry=new Entry(k,personal(o)?List.of():o.adapter.halves(),personal(o)?List.of():states,items.size(),version,data,true,details==null?"":details.label(),details==null?"":details.group());entries.put(k,entry);index(entry);changed();return true;
+            var entry=new Entry(k,personal(o)?List.of():o.adapter.halves(),personal(o)?List.of():states,items.size(),version,data,true,details==null?"":details.label(),details==null?"":details.group(),System.currentTimeMillis());entries.put(k,entry);index(entry);changed();return true;
         }catch(RuntimeException e){failure("Cannot serialize tracked storage",e);return false;}
     }
     public static Entry get(Key key){load();return entries.get(key);}
-    public static void edit(Key key,String label,String group){load();var e=entries.get(key);if(e==null)return;String name=label.strip();if(name.length()>80)name=name.substring(0,80);if(!group.isEmpty()&&!StorageGroups.groups(key.server()).containsKey(group))return;entries.put(key,new Entry(key,e.positions,e.states,e.size,e.dataVersion,e.data,e.valid,name,group));changed();flush();}
+    public static void edit(Key key,String label,String group){load();var e=entries.get(key);if(e==null)return;String name=label.strip();if(name.length()>80)name=name.substring(0,80);if(!group.isEmpty()&&!StorageGroups.groups(key.server()).containsKey(group))return;if(e.label.equals(name)&&e.group.equals(group))return;entries.put(key,new Entry(key,e.positions,e.states,e.size,e.dataVersion,e.data,e.valid,name,group,e.observedAt));changed();flush();}
     public static void remove(Key key){load();var old=entries.remove(key);if(old==null)return;for(var pos:old.positions)positions.remove(new CacheKey(key.server,key.dimension,pos));changed();flush();}
-    public static void ungroup(String server,String group){load();for(var item:entries.entrySet()){var e=item.getValue();if(e.key.server.equals(server)&&e.group.equals(group))item.setValue(new Entry(e.key,e.positions,e.states,e.size,e.dataVersion,e.data,e.valid,e.label,""));}changed();}
+    public static void ungroup(String server,String group){load();for(var item:entries.entrySet()){var e=item.getValue();if(e.key.server.equals(server)&&e.group.equals(group))item.setValue(new Entry(e.key,e.positions,e.states,e.size,e.dataVersion,e.data,e.valid,e.label,"",e.observedAt));}changed();}
+    /** Explicit cleanup only; legacy entries without a timestamp are preserved. */
+    public static int removeOlderThan(long hours){if(hours<1||hours>876000)return 0;load();long cutoff=System.currentTimeMillis()-hours*3600000L;var keys=entries.values().stream().filter(e->e.observedAt>0&&e.observedAt<cutoff).map(Entry::key).toList();for(var key:keys){var e=entries.remove(key);for(var pos:e.positions)positions.remove(new CacheKey(key.server,key.dimension,pos));}if(!keys.isEmpty()){changed();flush();}return keys.size();}
     public static void organizationChanged(){load();changed();flush();}
     private static void changed(){revision++;if(!dirty)due=System.currentTimeMillis()+500;dirty=true;}
     public static void clear(){load();entries.clear();positions.clear();changed();flush();}
@@ -95,7 +102,7 @@ public final class TrackedStorageStore {
             }
         }
     }
-    private static void invalidate(Entry e){entries.put(e.key,new Entry(e.key,e.positions,e.states,e.size,e.dataVersion,e.data,false,e.label,e.group));changed();}
+    private static void invalidate(Entry e){entries.put(e.key,new Entry(e.key,e.positions,e.states,e.size,e.dataVersion,e.data,false,e.label,e.group,e.observedAt));changed();}
     public static void blockChanged(BlockPos pos){
         var c=Minecraft.getInstance();if(c.level==null||!ClientChunks.loaded(c.level,pos))return;
         String server=SessionContext.serverId(c),dim=SessionContext.dimensionId(c);
@@ -122,7 +129,7 @@ public final class TrackedStorageStore {
     public static CompoundTag encode(Map<Key,Entry> source){
         var root=new CompoundTag();root.putInt("Schema",1);var list=new ListTag();
         for(var e:source.values()){
-            var n=new CompoundTag();n.putString("World",e.key.server());n.putString("Dimension",e.key.dimension());n.putString("Identity",e.key.identity());n.putInt("Size",e.size);n.putInt("DataVersion",e.dataVersion);n.putBoolean("Valid",e.valid);n.putString("Label",e.label);n.putString("Group",e.group);n.put("Data",e.data());
+            var n=new CompoundTag();n.putString("World",e.key.server());n.putString("Dimension",e.key.dimension());n.putString("Identity",e.key.identity());n.putInt("Size",e.size);n.putInt("DataVersion",e.dataVersion);n.putBoolean("Valid",e.valid);n.putString("Label",e.label);n.putString("Group",e.group);n.putLong("Observed",e.observedAt);n.put("Data",e.data());
             var positions=new ListTag();for(int i=0;i<e.positions.size();i++){var p=new CompoundTag();p.putLong("Pos",e.positions.get(i).asLong());p.putString("State",e.states.get(i));positions.add(p);}n.put("Positions",positions);list.add(n);
         }
         root.put("Entries",list);root.put("Organization",StorageGroups.encode());return root;
@@ -143,7 +150,7 @@ public final class TrackedStorageStore {
                 if(!canonical.equals(k.identity)||states.stream().anyMatch(String::isBlank)||(positions.size()==2?size!=54:!Set.of(3,5,9,27).contains(size)))throw new IllegalArgumentException("Invalid container identity");
                 for(BlockPos pos:positions)if(!occupied.add(new CacheKey(k.server,k.dimension,pos)))throw new IllegalArgumentException("Overlapping tracked storages");
             }
-            var entry=new Entry(k,positions,states,size,e.getIntOr("DataVersion",0),data,e.getBooleanOr("Valid",false),e.getStringOr("Label",""),e.getStringOr("Group",""));
+            var entry=new Entry(k,positions,states,size,e.getIntOr("DataVersion",0),data,e.getBooleanOr("Valid",false),e.getStringOr("Label",""),e.getStringOr("Group",""),Math.max(0,e.getLongOr("Observed",0)));
             if(restored.put(k,entry)!=null||restored.size()>50000)throw new IllegalArgumentException("Duplicate/oversized ledger");
         }
         return restored;
